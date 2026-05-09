@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ping Pong</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a1a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  cursor: none;
+}
+canvas {
+  border: 2px solid #3366ff;
+  border-radius: 4px;
+  box-shadow: 0 0 40px rgba(50, 100, 255, 0.3);
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+}
+#ui {
+  position: absolute;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 10; color: white; text-align: center;
+  pointer-events: none;
+}
+#ui.hidden { display: none; }
+#ui > * { pointer-events: auto; }
+h1 {
+  font-size: 52px; color: #4488ff;
+  text-shadow: 0 0 30px rgba(68,136,255,0.6), 3px 3px 0 #1a2266;
+  margin-bottom: 10px;
+}
+.subtitle { font-size: 18px; color: #88aacc; margin-bottom: 20px; }
+button {
+  padding: 14px 44px; font-size: 20px; border: none; border-radius: 30px;
+  cursor: pointer; margin: 6px; font-weight: bold;
+  transition: transform 0.15s;
+}
+button:hover { transform: scale(1.08); }
+.btn-easy { background: linear-gradient(135deg, #44cc88, #66eebb); color: #0a3020; }
+.btn-play { background: linear-gradient(135deg, #4488ff, #66aaff); color: #0a1030; }
+.btn-hard { background: linear-gradient(135deg, #ff4466, #ff6688); color: #3a1020; }
+.info { color: #667799; font-size: 14px; margin-top: 15px; }
+.score-big { font-size: 36px; color: #ffcc44; margin: 10px 0; }
+</style>
+</head>
+<body>
+<canvas id="game" width="500" height="700"></canvas>
+<div id="ui">
+  <h1>Ping Pong</h1>
+  <p class="subtitle">Move your mouse to aim. Click to swing!</p>
+  <button class="btn-easy" onclick="startGame(0.5)">Easy</button>
+  <button class="btn-play" onclick="startGame(1)">Normal</button>
+  <button class="btn-hard" onclick="startGame(1.5)">Hard</button>
+  <div class="info">First to 7 wins!</div>
+</div>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+const maxW = window.innerWidth - 20;
+const maxH = window.innerHeight - 20;
+const aspect = 500 / 700;
+let displayW, displayH;
+if (maxW / maxH > aspect) { displayH = maxH; displayW = Math.floor(maxH * aspect); }
+else { displayW = maxW; displayH = Math.floor(maxW / aspect); }
+const W = 500, H = 700;
+canvas.width = W * dpr; canvas.height = H * dpr;
+canvas.style.width = displayW + 'px'; canvas.style.height = displayH + 'px';
+ctx.scale(dpr, dpr);
+const ui = document.getElementById('ui');
+
+// ============ TABLE ============
+const TABLE_X = 30, TABLE_Y = 50;
+const TABLE_W = W - 60, TABLE_H = H - 100;
+const NET_Y_POS = TABLE_Y + TABLE_H / 2;
+const WIN_SCORE = 7;
+
+// ============ GAME STATE ============
+let gameRunning = false;
+let frameCount = 0;
+let playerScore = 0, cpuScore = 0;
+let difficulty = 1;
+let mouseX = W / 2, mouseY = H - 80;
+let prevMouseX = W / 2;
+let paddleVelocityX = 0; // tracks how fast the paddle is swiping
+let mouseDown = false;
+let particles = [];
+
+// Ball
+let ball = {
+  x: W / 2, y: H / 2, vx: 0, vy: 0,
+  radius: 8, height: 0, vHeight: 0,
+  spin: 0, // positive = curving right, negative = curving left
+  spinVisual: 0, // rotation angle for visual
+  active: false, shadow: true,
+};
+
+// Rackets
+let playerRacket = {
+  x: W / 2, y: H - 90,
+  angle: 0, targetAngle: 0,   // angle of the racket face
+  swinging: false, swingTimer: 0, swingPower: 0,
+  w: 50, h: 10,
+};
+let cpuRacket = {
+  x: W / 2, y: 90,
+  angle: 0, targetAngle: 0,
+  swinging: false, swingTimer: 0, swingPower: 0,
+  w: 50, h: 10,
+};
+
+// Serve state
+let serving = true;
+let serveTimer = 0;
+let serverIsPlayer = true;
+let rallyCount = 0;
+
+// ============ GAME LOGIC ============
+function resetBall(server) {
+  serving = true;
+  serveTimer = 40;
+  serverIsPlayer = server;
+  ball.active = false;
+  ball.vx = 0; ball.vy = 0;
+  ball.height = 10; ball.vHeight = 0;
+  ball.spin = 0; ball.spinVisual = 0;
+  if (server) {
+    ball.x = playerRacket.x;
+    ball.y = playerRacket.y - 30;
+  } else {
+    ball.x = cpuRacket.x;
+    ball.y = cpuRacket.y + 30;
+  }
+  rallyCount = 0;
+}
+
+function serveBall() {
+  serving = false;
+  ball.active = true;
+  ball.height = 15;
+  ball.vHeight = 2;
+  if (serverIsPlayer) {
+    ball.vy = -4 - Math.random();
+    ball.vx = (Math.random() - 0.5) * 2;
+  } else {
+    ball.vy = 4 + Math.random();
+    ball.vx = (Math.random() - 0.5) * 2;
+  }
+}
+
+function scorePoint(scorer) {
+  if (scorer === 'player') {
+    playerScore++;
+    spawnParticles(ball.x, ball.y, '#44ff88', 15);
+  } else {
+    cpuScore++;
+    spawnParticles(ball.x, ball.y, '#ff4466', 15);
+  }
+  if (playerScore >= WIN_SCORE || cpuScore >= WIN_SCORE) {
+    gameRunning = false;
+    setTimeout(showGameOver, 600);
+    return;
+  }
+  resetBall(scorer === 'player');
+}
+
+function swingRacket(racket, power, dirY) {
+  if (racket.swinging) return;
+  racket.swinging = true;
+  racket.swingTimer = 12;
+  racket.swingPower = power;
+}
+
+function update() {
+  if (!gameRunning) return;
+  frameCount++;
+
+  // === Player racket follows mouse ===
+  const prevPaddleX = playerRacket.x;
+  const targetX = Math.max(TABLE_X + playerRacket.w / 2, Math.min(TABLE_X + TABLE_W - playerRacket.w / 2, mouseX));
+  playerRacket.x += (targetX - playerRacket.x) * 0.4;
+  // Track paddle swipe velocity
+  paddleVelocityX = playerRacket.x - prevPaddleX;
+  // Racket angle based on swipe velocity
+  playerRacket.targetAngle = Math.max(-0.6, Math.min(0.6, paddleVelocityX * 0.08));
+  playerRacket.angle += (playerRacket.targetAngle - playerRacket.angle) * 0.3;
+
+  // === Player swing ===
+  if (playerRacket.swinging) {
+    playerRacket.swingTimer--;
+    if (playerRacket.swingTimer <= 0) playerRacket.swinging = false;
+  }
+
+  // Auto-swing when ball is close to player
+  if (ball.active && ball.vy > 0 && !playerRacket.swinging) {
+    const dx = Math.abs(ball.x - playerRacket.x);
+    const dy = ball.y - playerRacket.y;
+    if (dy > -25 && dy < 15 && dx < playerRacket.w / 2 + ball.radius + 15) {
+      swingRacket(playerRacket, 1, -1);
+    }
+  }
+
+  // Player racket hit
+  if (ball.active && playerRacket.swinging && playerRacket.swingTimer > 4) {
+    const dx = Math.abs(ball.x - playerRacket.x);
+    const dy = ball.y - playerRacket.y;
+    if (dy > -30 && dy < 20 && dx < playerRacket.w / 2 + ball.radius + 15) {
+      const offset = (ball.x - playerRacket.x) / (playerRacket.w / 2);
+      ball.vy = -5 - Math.random() * 1.5;
+      ball.vx = offset * 3 + paddleVelocityX * 0.5;
+      // Spin from swipe speed! Faster swipe = more spin
+      ball.spin = paddleVelocityX * 0.15;
+      ball.height = 12;
+      ball.vHeight = 2.5;
+      rallyCount++;
+      // Color particles based on spin direction
+      const spinColor = Math.abs(ball.spin) > 0.3
+        ? (ball.spin > 0 ? '#44ddff' : '#ff44dd')
+        : '#44aaff';
+      spawnParticles(ball.x, ball.y, spinColor, 8);
+      playerRacket.swingTimer = 4;
+    }
+  }
+
+  // === CPU AI ===
+  updateCPU();
+
+  // CPU racket hit
+  if (ball.active && cpuRacket.swinging && cpuRacket.swingTimer > 4) {
+    const dx = Math.abs(ball.x - cpuRacket.x);
+    const dy = cpuRacket.y - ball.y;
+    if (dy > -30 && dy < 20 && dx < cpuRacket.w / 2 + ball.radius + 10) {
+      const offset = (ball.x - cpuRacket.x) / (cpuRacket.w / 2);
+      ball.vy = 5 + Math.random() * 1.5;
+      ball.vx = offset * 2.5;
+      // CPU adds some spin based on difficulty
+      ball.spin = (Math.random() - 0.5) * 0.6 * difficulty;
+      ball.height = 12;
+      ball.vHeight = 2.5;
+      rallyCount++;
+      spawnParticles(ball.x, ball.y, '#ff6644', 8);
+      cpuRacket.swingTimer = 4;
+    }
+  }
+
+  // CPU swing animation
+  if (cpuRacket.swinging) {
+    cpuRacket.swingTimer--;
+    if (cpuRacket.swingTimer <= 0) cpuRacket.swinging = false;
+  }
+
+  // === Serve ===
+  if (serving) {
+    serveTimer--;
+    if (serverIsPlayer) {
+      ball.x = playerRacket.x;
+      ball.y = playerRacket.y - 30;
+    } else {
+      ball.x = cpuRacket.x;
+      ball.y = cpuRacket.y + 30;
+    }
+    if (serveTimer <= 0) serveBall();
+    return;
+  }
+
+  // === Ball physics ===
+  // Spin curves the ball sideways
+  ball.vx += ball.spin * 0.08;
+  ball.spin *= 0.985; // spin decays slowly
+  ball.spinVisual += ball.spin * 8; // visual rotation
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // Ball height (arc over net)
+  ball.height += ball.vHeight;
+  ball.vHeight -= 0.15;
+  if (ball.height < 0) {
+    ball.height = 0;
+    ball.vHeight = Math.abs(ball.vHeight) * 0.5;
+    if (Math.abs(ball.vHeight) < 0.3) ball.vHeight = 0;
+    // Bounce particles
+    if (ball.x > TABLE_X && ball.x < TABLE_X + TABLE_W && ball.y > TABLE_Y && ball.y < TABLE_Y + TABLE_H) {
+      spawnParticles(ball.x, ball.y, '#ffffff', 4);
+    }
+  }
+
+  // Side walls - bounce off
+  if (ball.x < TABLE_X + ball.radius) { ball.x = TABLE_X + ball.radius; ball.vx = Math.abs(ball.vx) * 0.7; }
+  if (ball.x > TABLE_X + TABLE_W - ball.radius) { ball.x = TABLE_X + TABLE_W - ball.radius; ball.vx = -Math.abs(ball.vx) * 0.7; }
+
+  // Ball goes past player (bottom)
+  if (ball.y > H + 20) { scorePoint('cpu'); return; }
+  // Ball goes past CPU (top)
+  if (ball.y < -20) { scorePoint('player'); return; }
+
+  // Friction
+  ball.vx *= 0.995;
+}
+
+function updateCPU() {
+  const speed = 3 * difficulty;
+  const reaction = 0.05 * difficulty;
+
+  // Track ball
+  let targetX = ball.x;
+  if (ball.vy < 0) {
+    // Ball coming toward CPU
+    const timeToReach = Math.max(1, (ball.y - cpuRacket.y) / Math.max(-ball.vy, 0.1));
+    targetX = ball.x + ball.vx * timeToReach * 0.4;
+  }
+  // Imperfection
+  targetX += Math.sin(frameCount * 0.03) * (40 / difficulty);
+
+  const diff = targetX - cpuRacket.x;
+  cpuRacket.x += Math.sign(diff) * Math.min(Math.abs(diff) * reaction, speed);
+  cpuRacket.x = Math.max(TABLE_X + cpuRacket.w / 2, Math.min(TABLE_X + TABLE_W - cpuRacket.w / 2, cpuRacket.x));
+
+  // CPU angle
+  cpuRacket.targetAngle = ((cpuRacket.x - W / 2) / (W / 2)) * -0.3;
+  cpuRacket.angle += (cpuRacket.targetAngle - cpuRacket.angle) * 0.1;
+
+  // CPU auto-swing
+  if (ball.active && ball.vy < 0 && !cpuRacket.swinging) {
+    const dx = Math.abs(ball.x - cpuRacket.x);
+    const dy = cpuRacket.y - ball.y;
+    if (dy > -20 && dy < 20 && dx < cpuRacket.w / 2 + ball.radius + 10) {
+      swingRacket(cpuRacket, 1, 1);
+    }
+  }
+}
+
+// ============ PARTICLES ============
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 5,
+      vy: (Math.random() - 0.5) * 5,
+      life: 15 + Math.random() * 15,
+      maxLife: 30, color,
+      size: 2 + Math.random() * 3,
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.05; p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ============ DRAWING ============
+function draw() {
+  // Background
+  ctx.fillStyle = '#0d1020';
+  ctx.fillRect(0, 0, W, H);
+
+  drawTable();
+  drawNet();
+  drawBallShadow();
+  drawRacket(cpuRacket, '#cc2222', '#ff4444', false);
+  drawRacket(playerRacket, '#2244cc', '#4488ff', true);
+  drawBall();
+  drawParticlesFn();
+  drawHUD();
+  drawCursor();
+}
+
+function drawTable() {
+  // Table shadow
+  ctx.fillStyle = 'rgba(0, 50, 20, 0.3)';
+  ctx.fillRect(TABLE_X + 4, TABLE_Y + 4, TABLE_W, TABLE_H);
+
+  // Table surface
+  const grad = ctx.createLinearGradient(TABLE_X, TABLE_Y, TABLE_X, TABLE_Y + TABLE_H);
+  grad.addColorStop(0, '#0a5530');
+  grad.addColorStop(0.5, '#0d6638');
+  grad.addColorStop(1, '#0a5530');
+  ctx.fillStyle = grad;
+  ctx.fillRect(TABLE_X, TABLE_Y, TABLE_W, TABLE_H);
+
+  // Table border
+  ctx.strokeStyle = '#1a8855';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(TABLE_X, TABLE_Y, TABLE_W, TABLE_H);
+
+  // White boundary lines
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(TABLE_X + 8, TABLE_Y + 8, TABLE_W - 16, TABLE_H - 16);
+
+  // Center line (dashed, lengthwise)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(W / 2, TABLE_Y + 10);
+  ctx.lineTo(W / 2, TABLE_Y + TABLE_H - 10);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Service lines
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(TABLE_X + 10, TABLE_Y + TABLE_H * 0.25);
+  ctx.lineTo(TABLE_X + TABLE_W - 10, TABLE_Y + TABLE_H * 0.25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(TABLE_X + 10, TABLE_Y + TABLE_H * 0.75);
+  ctx.lineTo(TABLE_X + TABLE_W - 10, TABLE_Y + TABLE_H * 0.75);
+  ctx.stroke();
+}
+
+function drawNet() {
+  const ny = NET_Y_POS;
+  // Net shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+  ctx.fillRect(TABLE_X - 5, ny + 2, TABLE_W + 10, 4);
+
+  // Net posts
+  ctx.fillStyle = '#888';
+  ctx.fillRect(TABLE_X - 8, ny - 6, 6, 12);
+  ctx.fillRect(TABLE_X + TABLE_W + 2, ny - 6, 6, 12);
+
+  // Net mesh
+  ctx.strokeStyle = 'rgba(200, 200, 220, 0.5)';
+  ctx.lineWidth = 1;
+  // Horizontal lines
+  for (let i = 0; i < 3; i++) {
+    const yo = ny - 3 + i * 3;
+    ctx.beginPath(); ctx.moveTo(TABLE_X - 5, yo); ctx.lineTo(TABLE_X + TABLE_W + 5, yo); ctx.stroke();
+  }
+  // Vertical mesh lines
+  ctx.strokeStyle = 'rgba(200, 200, 220, 0.2)';
+  for (let x = TABLE_X; x <= TABLE_X + TABLE_W; x += 15) {
+    ctx.beginPath(); ctx.moveTo(x, ny - 4); ctx.lineTo(x, ny + 4); ctx.stroke();
+  }
+
+  // Top bar (bright)
+  ctx.strokeStyle = '#ccccdd';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(TABLE_X - 6, ny - 4); ctx.lineTo(TABLE_X + TABLE_W + 6, ny - 4); ctx.stroke();
+}
+
+function drawRacket(racket, darkColor, lightColor, isPlayer) {
+  ctx.save();
+  ctx.translate(racket.x, racket.y);
+
+  // Swing animation
+  let swingOffset = 0;
+  if (racket.swinging) {
+    const t = racket.swingTimer / 12;
+    swingOffset = Math.sin(t * Math.PI) * (isPlayer ? -15 : 15);
+  }
+  ctx.translate(0, swingOffset);
+  ctx.rotate(racket.angle);
+
+  const rw = racket.w, rh = racket.h;
+
+  // Handle
+  ctx.fillStyle = '#775533';
+  ctx.fillRect(-3, isPlayer ? rh / 2 : -rh / 2 - 18, 6, 18);
+  ctx.fillStyle = '#664422';
+  ctx.fillRect(-4, isPlayer ? rh / 2 + 12 : -rh / 2 - 22, 8, 10);
+
+  // Racket shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(2, 2, rw / 2 + 2, rh / 2 + 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Racket face (oval)
+  ctx.fillStyle = darkColor;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rw / 2, rh / 2 + 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rubber surface
+  ctx.fillStyle = lightColor;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rw / 2 - 3, rh / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(-5, -2, rw / 4, rh / 3, -0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = darkColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rw / 2, rh / 2 + 3, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Swing effect (motion blur when swinging)
+  if (racket.swinging && racket.swingTimer > 6) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 2;
+    const dir = isPlayer ? 1 : -1;
+    for (let i = 1; i <= 3; i++) {
+      ctx.globalAlpha = 0.3 - i * 0.08;
+      ctx.beginPath();
+      ctx.ellipse(0, dir * i * 5, rw / 2, rh / 2 + 3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+
+  // Label
+  ctx.fillStyle = isPlayer ? '#88aaff' : '#ff8888';
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(isPlayer ? 'YOU' : 'CPU', racket.x, isPlayer ? racket.y + 35 : racket.y - 28);
+  ctx.textAlign = 'left';
+}
+
+function drawBallShadow() {
+  if (!ball.active && !serving) return;
+  // Shadow on table gets bigger/fainter as ball goes higher
+  const shadowScale = 1 + ball.height * 0.03;
+  const shadowAlpha = Math.max(0.05, 0.3 - ball.height * 0.015);
+  ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+  ctx.beginPath();
+  ctx.ellipse(ball.x + 2, ball.y + 2, ball.radius * shadowScale, ball.radius * shadowScale * 0.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBall() {
+  if (!ball.active && !serving) return;
+  const bx = ball.x;
+  const by = ball.y - ball.height; // ball lifts up visually
+  const r = ball.radius + ball.height * 0.1; // looks bigger when higher (closer to viewer)
+
+  // Glow
+  ctx.fillStyle = 'rgba(255, 180, 50, 0.1)';
+  ctx.beginPath(); ctx.arc(bx, by, r * 2.5, 0, Math.PI * 2); ctx.fill();
+
+  // Ball body
+  ctx.save();
+  ctx.translate(bx, by);
+
+  const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+  grad.addColorStop(0, '#ffdd66');
+  grad.addColorStop(0.6, '#ffaa22');
+  grad.addColorStop(1, '#cc7700');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+
+  // Spin stripe (rotates with spin)
+  if (Math.abs(ball.spin) > 0.05) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.clip();
+    ctx.rotate(ball.spinVisual);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.2, 0); ctx.lineTo(r * 1.2, 0);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(200, 100, 0, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.2); ctx.lineTo(0, r * 1.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Shine
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.25, r * 0.35, 0, Math.PI * 2); ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = 'rgba(150, 80, 0, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+
+  ctx.restore();
+
+  // Spin curve trail (shows which way ball is curving)
+  if (Math.abs(ball.spin) > 0.15 && ball.active) {
+    const trailColor = ball.spin > 0 ? 'rgba(68, 220, 255, 0.3)' : 'rgba(255, 68, 220, 0.3)';
+    ctx.strokeStyle = trailColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ball.x, ball.y);
+    // Draw a curved trail showing predicted path
+    const steps = 8;
+    let tx = ball.x, ty = ball.y, tvx = ball.vx, tvy = ball.vy, ts = ball.spin;
+    for (let i = 0; i < steps; i++) {
+      tvx += ts * 0.08;
+      ts *= 0.985;
+      tx -= tvx * 3;
+      ty -= tvy * 3;
+      ctx.lineTo(tx, ty);
+    }
+    ctx.stroke();
+  }
+
+  // Height indicator line (connects ball to shadow when high)
+  if (ball.height > 3) {
+    ctx.strokeStyle = 'rgba(255, 200, 100, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(bx, by + r); ctx.lineTo(ball.x, ball.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawParticlesFn() {
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // Score bar
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(0, 0, W, 40);
+
+  // Player score (bottom = you)
+  ctx.fillStyle = '#4488ff';
+  ctx.font = 'bold 24px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(playerScore, W / 2 - 15, 30);
+
+  ctx.fillStyle = '#666';
+  ctx.font = 'bold 18px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('-', W / 2, 28);
+
+  ctx.fillStyle = '#ff5555';
+  ctx.font = 'bold 24px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(cpuScore, W / 2 + 15, 30);
+
+  // Labels
+  ctx.fillStyle = '#88aacc';
+  ctx.font = '10px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('YOU', W / 2 - 15, 12);
+  ctx.textAlign = 'left';
+  ctx.fillText('CPU', W / 2 + 15, 12);
+  ctx.textAlign = 'left';
+
+  // Rally
+  if (rallyCount > 2) {
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Rally: ${rallyCount}`, W / 2, H / 2 - 20);
+    ctx.textAlign = 'left';
+  }
+
+  // Serve text
+  if (serving) {
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '15px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(serverIsPlayer ? 'Your serve...' : 'CPU serving...', W / 2, H / 2 + 5);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawCursor() {
+  // Custom crosshair cursor
+  ctx.strokeStyle = 'rgba(68, 136, 255, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(mouseX - 14, mouseY); ctx.lineTo(mouseX + 14, mouseY);
+  ctx.moveTo(mouseX, mouseY - 14); ctx.lineTo(mouseX, mouseY + 14);
+  ctx.stroke();
+}
+
+// ============ GAME OVER ============
+function showGameOver() {
+  const won = playerScore >= WIN_SCORE;
+  ui.classList.remove('hidden');
+  ui.innerHTML = `
+    <h1>${won ? 'You Win!' : 'CPU Wins'}</h1>
+    <div class="score-big">${playerScore} - ${cpuScore}</div>
+    <button class="btn-easy" onclick="startGame(0.5)">Easy</button>
+    <button class="btn-play" onclick="startGame(1)">Normal</button>
+    <button class="btn-hard" onclick="startGame(1.5)">Hard</button>
+    <div class="info">First to ${WIN_SCORE} wins!</div>
+  `;
+}
+
+// ============ GAME LOOP ============
+function startGame(diff) {
+  ui.classList.add('hidden');
+  difficulty = diff;
+  playerScore = 0; cpuScore = 0;
+  particles = [];
+  playerRacket.x = W / 2; cpuRacket.x = W / 2;
+  gameRunning = true;
+  resetBall(true);
+}
+
+function gameLoop() {
+  update();
+  updateParticles();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============ INPUT ============
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - rect.left) * (W / rect.width);
+  mouseY = (e.clientY - rect.top) * (H / rect.height);
+});
+canvas.addEventListener('mousedown', () => { mouseDown = true; });
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

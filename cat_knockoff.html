@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cat Knockoff!</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1028;
+  display: flex; justify-content: center; align-items: center;
+  height: 100vh; overflow: hidden;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+canvas {
+  border: 3px solid #cc77dd;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(200, 120, 220, 0.3);
+  max-width: 100vw; max-height: 100vh; object-fit: contain;
+}
+#ui {
+  position: absolute; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 10; color: white; text-align: center; pointer-events: none;
+}
+#ui.hidden { display: none; }
+#ui > * { pointer-events: auto; }
+h1 {
+  font-size: 48px; color: #ee88cc;
+  text-shadow: 3px 3px 0 #662244, 0 0 20px rgba(238, 136, 204, 0.5);
+  margin-bottom: 5px;
+}
+.subtitle { font-size: 18px; color: #bbaacc; margin-bottom: 20px; }
+button {
+  padding: 14px 50px; font-size: 20px; border: none; border-radius: 30px;
+  cursor: pointer; margin: 8px; font-weight: bold;
+  transition: transform 0.15s;
+  background: linear-gradient(135deg, #cc77dd, #ee99ff);
+  color: #2a1030; box-shadow: 0 4px 15px rgba(200, 120, 220, 0.4);
+}
+button:hover { transform: scale(1.08); }
+.info { color: #887799; font-size: 13px; margin-top: 15px; line-height: 1.8; }
+.controls-box {
+  display: flex; gap: 40px; margin-top: 10px; text-align: left;
+}
+.control-col { font-size: 13px; color: #aaa; }
+.control-col b { color: #ee88cc; }
+.control-col .p2 b { color: #88ccee; }
+.winner-text { font-size: 32px; margin: 10px 0; }
+.score-text { font-size: 20px; color: #ccc; margin-bottom: 15px; }
+.mode-btns { display: flex; gap: 12px; margin-bottom: 15px; }
+.mode-btn {
+  padding: 12px 36px; font-size: 18px; border: none; border-radius: 25px;
+  cursor: pointer; font-weight: bold; transition: transform 0.15s;
+}
+.mode-btn:hover { transform: scale(1.08); }
+.btn-1p { background: linear-gradient(135deg, #ee88cc, #ff99dd); color: #2a1030; }
+.btn-2p { background: linear-gradient(135deg, #88ccee, #aaddff); color: #102a30; }
+.cpu-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0;
+  max-width: 320px;
+}
+.cpu-btn {
+  padding: 10px 0; font-size: 15px; border: none; border-radius: 15px;
+  cursor: pointer; font-weight: bold; transition: transform 0.15s;
+  color: white;
+}
+.cpu-btn:hover { transform: scale(1.1); }
+.back-link { color: #aa88cc; font-size: 14px; cursor: pointer; margin-top: 10px; text-decoration: underline; }
+#cpu-select { display: none; }
+</style>
+</head>
+<body>
+<canvas id="game" width="900" height="600"></canvas>
+<div id="ui"></div>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+const W = 900, H = 600;
+const maxW = window.innerWidth - 20, maxH = window.innerHeight - 20;
+const aspect = W / H;
+let dW, dH;
+if (maxW / maxH > aspect) { dH = maxH; dW = Math.floor(maxH * aspect); }
+else { dW = maxW; dH = Math.floor(maxW / aspect); }
+canvas.width = W * dpr; canvas.height = H * dpr;
+canvas.style.width = dW + 'px'; canvas.style.height = dH + 'px';
+ctx.scale(dpr, dpr);
+const ui = document.getElementById('ui');
+
+// ============ CONSTANTS ============
+const GRAVITY = 0.5;
+const JUMP_FORCE = -11;
+const MOVE_SPEED = 4;
+const DASH_SPEED = 12;
+const SLAM_SPEED = 10;
+const KNOCKBACK = 8;
+const KNOCK_UP = -6;
+const FRICTION = 1;
+const AIR_FRICTION = 1;
+const MAX_FALL = 12;
+
+// ============ GAME STATE ============
+let gameRunning = false;
+let frameCount = 0;
+let keys = {};
+let p1Score = 0, p2Score = 0;
+let gameMode = '2p'; // '1p' or '2p'
+let cpuLevel = 5; // 1-9
+let cpuKeys = {}; // simulated keys for CPU
+const WIN_SCORE = 5;
+let roundTimer = 0;
+let roundOver = false;
+let particles = [];
+let screenShake = 0;
+let platforms = [];
+
+// ============ PLAYERS ============
+function createCat(x, y, breed) {
+  return {
+    x, y, w: 36, h: 36,
+    vx: 0, vy: 0,
+    onGround: false,
+    facingRight: breed === 'ragdoll' ? true : false,
+    breed, // 'ragdoll' or 'tabby'
+    alive: true,
+    jumps: 0, maxJumps: 2,
+    // Attack
+    dashing: false, dashTimer: 0, dashCooldown: 0,
+    slamming: false,
+    // Hit
+    hitstun: 0, invincible: 0,
+    knockbackX: 0, knockbackY: 0,
+    // Animation
+    runFrame: 0, tailWag: 0,
+    eyeBlink: 0, expression: 'normal',
+    // Damage (more damage = flies farther when hit)
+    damage: 0,
+  };
+}
+
+let p1, p2;
+
+// ============ PLATFORMS ============
+function buildArena() {
+  platforms = [
+    // Main platform
+    { x: 200, y: 440, w: 500, h: 25, type: 'main' },
+    // Side platforms
+    { x: 80, y: 350, w: 120, h: 18, type: 'side' },
+    { x: 700, y: 350, w: 120, h: 18, type: 'side' },
+  ];
+}
+
+// ============ PHYSICS ============
+function updateCat(cat, otherCat, controls, useKeys) {
+  if (!cat.alive) return;
+  cat.tailWag += 0.15;
+  if (cat.hitstun > 0) cat.hitstun--;
+  if (cat.invincible > 0) cat.invincible--;
+  if (cat.dashCooldown > 0) cat.dashCooldown--;
+  if (cat.eyeBlink > 0) cat.eyeBlink--;
+  if (Math.random() < 0.005) cat.eyeBlink = 8;
+
+  const k = useKeys || keys; // which key source to use
+  const inHitstun = cat.hitstun > 0;
+
+  // Movement (disabled during hitstun)
+  if (!inHitstun && !cat.dashing && !cat.slamming) {
+    if (k[controls.left]) {
+      cat.vx -= MOVE_SPEED * 0.3;
+      cat.facingRight = false;
+    }
+    if (k[controls.right]) {
+      cat.vx += MOVE_SPEED * 0.3;
+      cat.facingRight = true;
+    }
+    // Jump
+    if (k[controls.jump] && cat.jumps < cat.maxJumps) {
+      if (!cat._jumpHeld) {
+        cat.vy = JUMP_FORCE;
+        cat.jumps++;
+        cat._jumpHeld = true;
+        spawnParticles(cat.x + cat.w / 2, cat.y + cat.h, '#ffffff', 5);
+      }
+    }
+    if (!k[controls.jump]) cat._jumpHeld = false;
+
+    // Slam
+    if (k[controls.slam] && !cat.onGround) {
+      cat.slamming = true;
+      cat.vy = SLAM_SPEED;
+      cat.vx *= 0.3;
+    }
+
+    // Dash attack
+    if (k[controls.attack] && cat.dashCooldown <= 0) {
+      cat.dashing = true;
+      cat.dashTimer = 10;
+      cat.dashCooldown = 30;
+      cat.vx = cat.facingRight ? DASH_SPEED : -DASH_SPEED;
+      cat.vy = -2;
+      spawnParticles(cat.x + cat.w / 2, cat.y + cat.h / 2,
+        cat.breed === 'ragdoll' ? '#eeccdd' : '#ffcc88', 8);
+    }
+  }
+
+  // Dash timer
+  if (cat.dashing) {
+    cat.dashTimer--;
+    if (cat.dashTimer <= 0) cat.dashing = false;
+  }
+
+  // Friction
+  if (cat.onGround && !cat.dashing) {
+    cat.vx *= FRICTION;
+  } else {
+    cat.vx *= AIR_FRICTION;
+  }
+  if (!cat.dashing && Math.abs(cat.vx) > MOVE_SPEED) {
+    cat.vx = MOVE_SPEED * Math.sign(cat.vx);
+  }
+  // No deadzone - keep all velocity
+
+  // Gravity
+  if (!cat.slamming || cat.onGround) {
+    cat.vy += GRAVITY;
+  }
+  if (cat.vy > MAX_FALL) cat.vy = MAX_FALL;
+
+  // Apply velocity
+  cat.x += cat.vx;
+  cat.y += cat.vy;
+
+  // Platform collision
+  cat.onGround = false;
+  for (const p of platforms) {
+    if (cat.x + cat.w > p.x && cat.x < p.x + p.w) {
+      // Landing on top
+      if (cat.vy >= 0 && cat.y + cat.h >= p.y && cat.y + cat.h <= p.y + p.h + cat.vy + 2) {
+        cat.y = p.y - cat.h;
+        cat.vy = 0;
+        cat.onGround = true;
+        cat.jumps = 0;
+        if (cat.slamming) {
+          cat.slamming = false;
+          screenShake = 6;
+          spawnParticles(cat.x + cat.w / 2, cat.y + cat.h, '#ffdd88', 10);
+          // Slam shockwave hits other cat if nearby
+          if (otherCat.alive && Math.abs(otherCat.x - cat.x) < 80 && otherCat.onGround) {
+            hitCat(otherCat, cat, 0, -8, 5);
+          }
+        }
+      }
+    }
+  }
+
+  // Run animation
+  if (cat.onGround && Math.abs(cat.vx) > 0.5) {
+    cat.runFrame += Math.abs(cat.vx) * 0.15;
+  }
+
+  // Expression
+  if (inHitstun) cat.expression = 'hurt';
+  else if (cat.dashing) cat.expression = 'attack';
+  else if (cat.slamming) cat.expression = 'attack';
+  else if (!cat.onGround && cat.vy > 3) cat.expression = 'scared';
+  else if (Math.abs(cat.vx) > 2) cat.expression = 'happy';
+  else cat.expression = 'normal';
+
+  // Body collision - cats push each other apart horizontally only
+  if (otherCat.alive && !cat.dashing && !otherCat.dashing) {
+    const overlapX = (cat.w + otherCat.w) / 2 - Math.abs((cat.x + cat.w / 2) - (otherCat.x + otherCat.w / 2));
+    const overlapY = (cat.h + otherCat.h) / 2 - Math.abs((cat.y + cat.h / 2) - (otherCat.y + otherCat.h / 2));
+    if (overlapX > 0 && overlapY > 0) {
+      // Always push apart horizontally - never mess with vertical/gravity
+      const pushDir = (cat.x + cat.w / 2) < (otherCat.x + otherCat.w / 2) ? -1 : 1;
+      const push = overlapX / 2 + 1;
+      cat.x += pushDir * push;
+      cat.vx += pushDir * 0.5;
+    }
+  }
+
+  // Hit detection with other cat
+  if (cat.dashing && cat.dashTimer > 3 && otherCat.alive && otherCat.invincible <= 0) {
+    if (cat.x + cat.w > otherCat.x && cat.x < otherCat.x + otherCat.w &&
+        cat.y + cat.h > otherCat.y && cat.y < otherCat.y + otherCat.h) {
+      const dir = cat.facingRight ? 1 : -1;
+      hitCat(otherCat, cat, dir * KNOCKBACK, KNOCK_UP, 8);
+      cat.dashing = false;
+      cat.vx *= -0.3; // recoil
+      screenShake = 8;
+    }
+  }
+
+  // Fall off screen = KO
+  if (cat.y > H + 60 || cat.x < -80 || cat.x > W + 80 || cat.y < -200) {
+    cat.alive = false;
+    spawnParticles(
+      Math.max(0, Math.min(W, cat.x + cat.w / 2)),
+      Math.max(0, Math.min(H, cat.y + cat.h / 2)),
+      cat.breed === 'ragdoll' ? '#eeccdd' : '#ffaa44', 20
+    );
+  }
+}
+
+function hitCat(victim, attacker, kbx, kby, dmg) {
+  victim.damage += dmg;
+  const multiplier = 1 + victim.damage * 0.03;
+  victim.vx = kbx * multiplier;
+  victim.vy = kby * multiplier;
+  victim.hitstun = 15;
+  victim.invincible = 20;
+  victim.onGround = false;
+  screenShake = Math.min(12, 4 + victim.damage * 0.15);
+  spawnParticles(victim.x + victim.w / 2, victim.y + victim.h / 2, '#ffff88', 12);
+}
+
+// ============ PARTICLES ============
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6 - 2,
+      life: 15 + Math.random() * 15, maxLife: 30,
+      color, size: 2 + Math.random() * 3,
+    });
+  }
+}
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ============ DRAWING ============
+function drawCat(cat) {
+  if (!cat.alive) return;
+  ctx.save();
+  ctx.translate(cat.x + cat.w / 2, cat.y + cat.h / 2);
+  if (!cat.facingRight) ctx.scale(-1, 1);
+
+  // Invincibility flash
+  if (cat.invincible > 0 && Math.floor(cat.invincible / 3) % 2 === 0) {
+    ctx.globalAlpha = 0.5;
+  }
+
+  // Dash trail
+  if (cat.dashing) {
+    ctx.globalAlpha *= 0.9;
+    const trailColor = cat.breed === 'ragdoll' ? 'rgba(230,200,220,0.3)' : 'rgba(255,200,130,0.3)';
+    for (let i = 1; i <= 3; i++) {
+      ctx.fillStyle = trailColor;
+      ctx.beginPath();
+      ctx.ellipse(-i * 8, 0, cat.w / 2 - i, cat.h / 2 - i * 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const isRagdoll = cat.breed === 'ragdoll';
+
+  // Body bob
+  let bob = 0;
+  if (cat.onGround && Math.abs(cat.vx) > 0.5) bob = Math.sin(cat.runFrame * 0.4) * 2;
+
+  ctx.translate(0, bob);
+
+  // Tail
+  ctx.save();
+  const wagAngle = Math.sin(cat.tailWag * (cat.expression === 'happy' ? 2 : 1)) * 0.4;
+  ctx.translate(-14, 4);
+  ctx.rotate(-0.6 + wagAngle);
+  if (isRagdoll) {
+    // Ragdoll: fluffy cream tail with dark tip
+    ctx.fillStyle = '#e8ddd0';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-10, -12, -6, -22);
+    ctx.quadraticCurveTo(-2, -26, 2, -20);
+    ctx.quadraticCurveTo(4, -10, 2, 0);
+    ctx.fill();
+    ctx.fillStyle = '#8b7355';
+    ctx.beginPath();
+    ctx.moveTo(-5, -18);
+    ctx.quadraticCurveTo(-2, -26, 2, -20);
+    ctx.quadraticCurveTo(0, -16, -3, -16);
+    ctx.fill();
+  } else {
+    // Tabby: orange striped tail
+    ctx.fillStyle = '#e8a040';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-10, -12, -6, -22);
+    ctx.quadraticCurveTo(-2, -24, 2, -18);
+    ctx.quadraticCurveTo(4, -10, 2, 0);
+    ctx.fill();
+    ctx.strokeStyle = '#c07020';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-2, -6); ctx.lineTo(-5, -10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-3, -12); ctx.lineTo(-6, -16); ctx.stroke();
+  }
+  ctx.restore();
+
+  // Back legs
+  const legA = cat.onGround && Math.abs(cat.vx) > 0.5 ? Math.sin(cat.runFrame * 0.4) * 0.4 : 0;
+  ctx.fillStyle = isRagdoll ? '#e8ddd0' : '#e8a040';
+  ctx.save(); ctx.translate(-8, 12); ctx.rotate(-legA);
+  ctx.fillRect(-3, 0, 7, 8);
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#f0c060';
+  ctx.beginPath(); ctx.ellipse(0.5, 8, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(6, 12); ctx.rotate(legA);
+  ctx.fillStyle = isRagdoll ? '#e8ddd0' : '#e8a040';
+  ctx.fillRect(-3, 0, 7, 8);
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#f0c060';
+  ctx.beginPath(); ctx.ellipse(0.5, 8, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // Body
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#e8a040';
+  ctx.beginPath(); ctx.ellipse(0, 6, 14, 11, 0, 0, Math.PI * 2); ctx.fill();
+  // Belly
+  ctx.fillStyle = isRagdoll ? '#faf8f4' : '#f5d890';
+  ctx.beginPath(); ctx.ellipse(0, 9, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (!isRagdoll) {
+    // Tabby stripes
+    ctx.strokeStyle = '#c07020';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(-2, 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(0, 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -1); ctx.lineTo(2, 4); ctx.stroke();
+  }
+
+  // Front legs
+  ctx.fillStyle = isRagdoll ? '#e8ddd0' : '#e8a040';
+  ctx.save(); ctx.translate(-7, 10); ctx.rotate(legA * 0.8);
+  ctx.fillRect(-3, 0, 6, 9);
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#f0c060';
+  ctx.beginPath(); ctx.ellipse(0, 9, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(6, 10); ctx.rotate(-legA * 0.8);
+  ctx.fillStyle = isRagdoll ? '#e8ddd0' : '#e8a040';
+  ctx.fillRect(-3, 0, 6, 9);
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#f0c060';
+  ctx.beginPath(); ctx.ellipse(0, 9, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // === HEAD ===
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#e8a040';
+  ctx.beginPath(); ctx.ellipse(0, -6, 14, 12, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (isRagdoll) {
+    // Ragdoll face mask (dark points on face)
+    ctx.fillStyle = '#8b7355';
+    // Dark ears, nose bridge
+    ctx.beginPath(); ctx.ellipse(0, -5, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // Cream inner face
+    ctx.fillStyle = '#e8ddd0';
+    ctx.beginPath(); ctx.ellipse(0, -3, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Cheek fluff
+  ctx.fillStyle = isRagdoll ? '#f0ece6' : '#f0c060';
+  ctx.beginPath(); ctx.ellipse(-9, -2, 5, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(9, -2, 5, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+
+  if (isRagdoll) {
+    // Extra fluff around neck (ragdoll ruff)
+    ctx.fillStyle = '#f5f0ea';
+    ctx.beginPath(); ctx.ellipse(-10, 2, 5, 6, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, 2, 5, 6, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 5, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Ears
+  if (isRagdoll) {
+    // Ragdoll: darker pointed ears
+    ctx.fillStyle = '#8b7355';
+    ctx.beginPath(); ctx.moveTo(-10, -12); ctx.lineTo(-7, -23); ctx.lineTo(-2, -12); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(2, -12); ctx.lineTo(7, -23); ctx.lineTo(10, -12); ctx.fill();
+    ctx.fillStyle = '#c9a888';
+    ctx.beginPath(); ctx.moveTo(-8, -13); ctx.lineTo(-7, -20); ctx.lineTo(-4, -13); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(4, -13); ctx.lineTo(7, -20); ctx.lineTo(8, -13); ctx.fill();
+  } else {
+    // Tabby: orange ears with pink inner
+    ctx.fillStyle = '#e8a040';
+    ctx.beginPath(); ctx.moveTo(-10, -12); ctx.lineTo(-7, -23); ctx.lineTo(-2, -12); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(2, -12); ctx.lineTo(7, -23); ctx.lineTo(10, -12); ctx.fill();
+    ctx.fillStyle = '#f0a0a0';
+    ctx.beginPath(); ctx.moveTo(-8, -13); ctx.lineTo(-7, -20); ctx.lineTo(-4, -13); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(4, -13); ctx.lineTo(7, -20); ctx.lineTo(8, -13); ctx.fill();
+  }
+
+  // === EYES ===
+  const expr = cat.expression;
+  const blink = cat.eyeBlink > 0;
+  if (blink || expr === 'hurt') {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+    if (expr === 'hurt') {
+      // X eyes
+      ctx.beginPath(); ctx.moveTo(-5, -8); ctx.lineTo(-1, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-1, -8); ctx.lineTo(-5, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(1, -8); ctx.lineTo(5, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(5, -8); ctx.lineTo(1, -4); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(-3, -6, 2.5, 0.3, Math.PI - 0.3); ctx.stroke();
+      ctx.beginPath(); ctx.arc(3, -6, 2.5, 0.3, Math.PI - 0.3); ctx.stroke();
+    }
+  } else if (expr === 'attack') {
+    ctx.fillStyle = isRagdoll ? '#4488cc' : '#44aa55';
+    ctx.beginPath(); ctx.ellipse(-3, -7, 3.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3, -7, 3.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(-3, -7, 1, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3, -7, 1, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (expr === 'scared') {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-3, -7, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -7, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-3, -6, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -6, 2, 0, Math.PI * 2); ctx.fill();
+  } else if (expr === 'happy') {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(-3, -5, 2.5, Math.PI + 0.3, -0.3); ctx.stroke();
+    ctx.beginPath(); ctx.arc(3, -5, 2.5, Math.PI + 0.3, -0.3); ctx.stroke();
+  } else {
+    // Normal - breed-specific eye color
+    ctx.fillStyle = isRagdoll ? '#5599cc' : '#55aa55';
+    ctx.beginPath(); ctx.ellipse(-3, -7, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3, -7, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(-3, -7, 1.2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3, -7, 1.2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-2, -8, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -8, 1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = isRagdoll ? '#cc8888' : '#e07070';
+  ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(-2, -1.5); ctx.lineTo(2, -1.5); ctx.fill();
+
+  // Mouth
+  if (expr === 'attack') {
+    ctx.fillStyle = '#cc3344';
+    ctx.beginPath(); ctx.ellipse(0, 0, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (expr === 'scared') {
+    ctx.fillStyle = '#444';
+    ctx.beginPath(); ctx.ellipse(0, 0, 2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#777'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(0, -1.5); ctx.lineTo(-2, 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -1.5); ctx.lineTo(2, 0.5); ctx.stroke();
+  }
+
+  // Whiskers
+  ctx.strokeStyle = isRagdoll ? 'rgba(180,170,160,0.6)' : 'rgba(200,200,200,0.6)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(-16, -5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-7, -1); ctx.lineTo(-16, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7, -3); ctx.lineTo(16, -5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7, -1); ctx.lineTo(16, 0); ctx.stroke();
+
+  // Blush
+  if (expr === 'happy') {
+    ctx.fillStyle = 'rgba(255, 130, 130, 0.25)';
+    ctx.beginPath(); ctx.ellipse(-7, -1, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, -1, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Damage percent display
+  ctx.fillStyle = cat.damage > 80 ? '#ff4444' : cat.damage > 40 ? '#ffaa44' : '#ffffff';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${Math.floor(cat.damage)}%`, cat.x + cat.w / 2, cat.y - 14);
+  ctx.textAlign = 'left';
+}
+
+function drawPlatform(p) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(p.x + 3, p.y + 3, p.w, p.h);
+
+  // Platform body
+  const grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+  if (p.type === 'main') {
+    grad.addColorStop(0, '#6a5a80');
+    grad.addColorStop(1, '#4a3a60');
+  } else {
+    grad.addColorStop(0, '#5a6a80');
+    grad.addColorStop(1, '#3a4a60');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(p.x, p.y, p.w, p.h);
+
+  // Top edge highlight
+  ctx.fillStyle = p.type === 'main' ? '#8a7a9a' : '#7a8a9a';
+  ctx.fillRect(p.x, p.y, p.w, 3);
+
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(p.x, p.y, p.w, p.h);
+}
+
+function drawBackground() {
+  // Sky
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#1a1030');
+  sky.addColorStop(0.5, '#2a1845');
+  sky.addColorStop(1, '#0a0818');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  for (let i = 0; i < 50; i++) {
+    const sx = (i * 47 + 13) % W;
+    const sy = (i * 29 + 7) % (H * 0.6);
+    const twinkle = 0.2 + Math.sin(frameCount * 0.02 + i) * 0.3;
+    ctx.globalAlpha = twinkle;
+    ctx.beginPath(); ctx.arc(sx, sy, 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Danger zone indicators (edges glow red)
+  const edgeGlow = ctx.createLinearGradient(0, 0, 40, 0);
+  edgeGlow.addColorStop(0, 'rgba(255, 50, 50, 0.1)');
+  edgeGlow.addColorStop(1, 'rgba(255, 50, 50, 0)');
+  ctx.fillStyle = edgeGlow;
+  ctx.fillRect(0, 0, 40, H);
+  const edgeGlow2 = ctx.createLinearGradient(W, 0, W - 40, 0);
+  edgeGlow2.addColorStop(0, 'rgba(255, 50, 50, 0.1)');
+  edgeGlow2.addColorStop(1, 'rgba(255, 50, 50, 0)');
+  ctx.fillStyle = edgeGlow2;
+  ctx.fillRect(W - 40, 0, 40, H);
+  // Bottom
+  const edgeGlow3 = ctx.createLinearGradient(0, H, 0, H - 30);
+  edgeGlow3.addColorStop(0, 'rgba(255, 50, 50, 0.15)');
+  edgeGlow3.addColorStop(1, 'rgba(255, 50, 50, 0)');
+  ctx.fillStyle = edgeGlow3;
+  ctx.fillRect(0, H - 30, W, 30);
+}
+
+function drawParticlesFn() {
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // Score
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, W, 35);
+
+  // P1
+  ctx.fillStyle = '#eeccdd';
+  ctx.font = 'bold 14px Arial';
+  ctx.fillText('Ragdoll', 10, 15);
+  ctx.fillStyle = '#ee88cc';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText(p1Score, 10, 32);
+
+  // P2
+  ctx.fillStyle = '#ccddee';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(gameMode === '1p' ? `CPU Lv${cpuLevel}` : 'Tabby', W - 10, 15);
+  ctx.fillStyle = '#88ccee';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText(p2Score, W - 10, 32);
+  ctx.textAlign = 'left';
+
+  // Center divider
+  ctx.fillStyle = '#555';
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${p1Score} - ${p2Score}`, W / 2, 25);
+  ctx.textAlign = 'left';
+
+  // Round over message
+  if (roundOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(W / 2 - 120, H / 2 - 30, 240, 50);
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    if (!p1.alive) ctx.fillText('Tabby scores!', W / 2, H / 2 + 2);
+    else ctx.fillText('Ragdoll scores!', W / 2, H / 2 + 2);
+    ctx.textAlign = 'left';
+  }
+}
+
+function draw() {
+  ctx.save();
+  // Screen shake
+  if (screenShake > 0) {
+    ctx.translate((Math.random() - 0.5) * screenShake * 2, (Math.random() - 0.5) * screenShake * 2);
+    screenShake *= 0.85;
+    if (screenShake < 0.5) screenShake = 0;
+  }
+
+  drawBackground();
+  for (const plat of platforms) drawPlatform(plat);
+  drawParticlesFn();
+  if (p1) drawCat(p1);
+  if (p2) drawCat(p2);
+
+  ctx.restore();
+  if (p1 && p2) drawHUD();
+}
+
+// ============ GAME LOOP ============
+const P1_CONTROLS = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', slam: 'ArrowDown', attack: '/' };
+const P2_CONTROLS = { left: 'a', right: 'd', jump: 'w', slam: 's', attack: 'f' };
+
+function resetRound() {
+  // Place cats ON the main platform (y = platform.y - cat.h)
+  p1 = createCat(350, 440 - 36, 'ragdoll');
+  p2 = createCat(510, 440 - 36, 'tabby');
+  p2.facingRight = false;
+  // Mark them as grounded so gravity doesn't glitch
+  p1.onGround = true;
+  p2.onGround = true;
+  // Prevent auto-jump if keys held from last round
+  p1._jumpHeld = true;
+  p2._jumpHeld = true;
+  particles = [];
+  screenShake = 0;
+  roundOver = false;
+  roundTimer = 0;
+}
+
+// startGame removed - use start1P(level) or start2P() instead
+
+function showGameOver() {
+  const winner = p1Score >= WIN_SCORE ? 'Ragdoll' : (gameMode === '1p' ? 'CPU' : 'Tabby');
+  const winColor = p1Score >= WIN_SCORE ? '#ee88cc' : '#88ccee';
+  ui.classList.remove('hidden');
+
+  let buttons = '';
+  if (gameMode === '1p') {
+    buttons = `
+      <button class="mode-btn btn-1p" onclick="start1P(${cpuLevel})">Rematch (Lv ${cpuLevel})</button>
+      <button class="mode-btn btn-1p" onclick="showCpuSelect()" style="padding:10px 30px;font-size:15px">Change Level</button>
+    `;
+  } else {
+    buttons = `<button class="mode-btn btn-2p" onclick="start2P()">Rematch!</button>`;
+  }
+
+  ui.innerHTML = `
+    <div id="title-screen">
+      <div class="winner-text" style="color:${winColor}">${winner} Wins!</div>
+      <div class="score-text">${p1Score} - ${p2Score}</div>
+      ${gameMode === '1p' ? '<div style="color:#aaa;font-size:14px;margin-bottom:8px">CPU Level ' + cpuLevel + '</div>' : ''}
+      ${buttons}
+      <div class="back-link" onclick="showMainMenu()">Main Menu</div>
+    </div>
+    <div id="cpu-select" style="display:none"></div>
+  `;
+}
+
+const CONTROLS_HTML = `
+  <div class="controls-box">
+    <div class="control-col">
+      <b>Player 1 - Ragdoll</b><br>
+      Arrow Left / Right - Move<br>
+      Arrow Up - Jump (x2)<br>
+      Arrow Down - Slam down<br>
+      / key - Dash attack
+    </div>
+    <div class="control-col p2">
+      <b>Player 2 - Tabby</b><br>
+      A / D - Move<br>
+      W - Jump (x2)<br>
+      S - Slam down<br>
+      F - Dash attack
+    </div>
+  </div>
+  <div class="info" style="margin-top:10px;line-height:1.6">
+    <b style="color:#ffcc44">How to deal damage:</b><br>
+    <span style="color:#ff88aa">Dash Attack</span> - Lunge forward and slam into them<br>
+    <span style="color:#ff88aa">Slam Down</span> - Crash down from the air, shockwave hits nearby grounded cats<br>
+    <span style="color:#aaa">Higher damage % = fly farther when hit. Knock them off the edge to score!</span>
+  </div>
+`;
+
+function showMainMenu() {
+  ui.classList.remove('hidden');
+  gameRunning = false;
+  ui.innerHTML = `
+    <h1>Cat Knockoff!</h1>
+    <p class="subtitle">Knock the other cat off the edge! First to 5 wins!</p>
+    <div class="mode-btns">
+      <button class="mode-btn btn-1p" onclick="showCpuSelect()">1 Player</button>
+      <button class="mode-btn btn-2p" onclick="start2P()">2 Player</button>
+    </div>
+    ${CONTROLS_HTML}
+  `;
+}
+
+// ============ CPU AI ============
+function updateCPU_AI() {
+  if (!p2.alive || gameMode !== '1p') return;
+
+  // Clear CPU keys each frame
+  cpuKeys = {};
+
+  const me = p2, target = p1;
+  if (!target.alive) return;
+
+  const dx = target.x - me.x;
+  const dy = target.y - me.y;
+  const dist = Math.abs(dx);
+  const speed = 0.3 + cpuLevel * 0.08; // reaction multiplier
+  const aggression = cpuLevel / 9; // 0.11 to 1.0
+
+  // Move toward opponent
+  if (dist > 50) {
+    if (dx > 0) cpuKeys['d'] = true;
+    else cpuKeys['a'] = true;
+  } else if (dist > 20) {
+    // Close - sometimes move, sometimes wait
+    if (Math.random() < speed) {
+      if (dx > 0) cpuKeys['d'] = true;
+      else cpuKeys['a'] = true;
+    }
+  }
+
+  // Jump if target is above or to recover from being below platform
+  if (dy < -40 && me.onGround && Math.random() < 0.1 * speed) {
+    cpuKeys['w'] = true;
+  }
+  // Recovery jump if falling off
+  if (me.y > 420 && !me.onGround && me.jumps < me.maxJumps && Math.random() < 0.3) {
+    cpuKeys['w'] = true;
+  }
+  // Random jumps to be unpredictable
+  if (me.onGround && Math.random() < 0.02 * aggression) {
+    cpuKeys['w'] = true;
+  }
+
+  // Dash attack when close and facing target
+  if (dist < 80 && dist > 15 && me.dashCooldown <= 0 && Math.random() < 0.06 * aggression) {
+    const facingTarget = (dx > 0 && me.facingRight) || (dx < 0 && !me.facingRight);
+    if (facingTarget) {
+      cpuKeys['f'] = true;
+    }
+  }
+
+  // Slam when above opponent
+  if (dy > 20 && Math.abs(dx) < 40 && !me.onGround && Math.random() < 0.08 * aggression) {
+    cpuKeys['s'] = true;
+  }
+
+  // Dodge: if opponent is dashing toward us, jump
+  if (target.dashing && dist < 100 && Math.random() < 0.15 * speed) {
+    cpuKeys['w'] = true;
+  }
+
+  // Try to recover toward center if near edge
+  if (me.x < 120) cpuKeys['d'] = true;
+  if (me.x > W - 120) cpuKeys['a'] = true;
+
+  // Higher levels react faster - skip inputs on lower levels
+  if (Math.random() > speed) {
+    cpuKeys = {};
+  }
+}
+
+// ============ TITLE SCREEN ============
+function showTitle() {
+  showMainMenu();
+}
+
+function showCpuSelect() {
+  ui.classList.remove('hidden');
+  const colors = ['#44aa66','#55bb55','#77cc44','#aacc33','#ccbb22','#ddaa22','#ee8822','#ee5533','#ee2244'];
+  let btns = '';
+  for (let i = 1; i <= 9; i++) {
+    btns += `<button class="cpu-btn" style="background:${colors[i-1]}" onclick="start1P(${i})">Lv ${i}</button>`;
+  }
+  ui.innerHTML = `
+    <h1 style="font-size:36px">Choose CPU Level</h1>
+    <p class="subtitle">Higher = harder</p>
+    <div class="cpu-grid">${btns}</div>
+    <div class="back-link" onclick="showMainMenu()">Back</div>
+    <div class="info" style="margin-top:12px;line-height:1.5;font-size:12px">
+      <b style="color:#ee88cc">Your controls:</b>
+      Arrow Keys - Move / Jump | Down - Slam | / - Dash Attack
+    </div>
+  `;
+}
+
+function start1P(level) {
+  gameMode = '1p';
+  cpuLevel = level;
+  ui.classList.add('hidden');
+  p1Score = 0; p2Score = 0;
+  buildArena();
+  resetRound();
+  gameRunning = true;
+}
+
+function start2P() {
+  gameMode = '2p';
+  ui.classList.add('hidden');
+  p1Score = 0; p2Score = 0;
+  buildArena();
+  resetRound();
+  gameRunning = true;
+}
+
+function update() {
+  if (!gameRunning) return;
+  frameCount++;
+
+  // Run CPU AI if 1 player mode
+  if (gameMode === '1p') updateCPU_AI();
+
+  const p2Keys = gameMode === '1p' ? cpuKeys : keys;
+
+  if (!roundOver) {
+    updateCat(p1, p2, P1_CONTROLS, keys);
+    updateCat(p2, p1, P2_CONTROLS, p2Keys);
+
+    if (!p1.alive || !p2.alive) {
+      roundOver = true;
+      roundTimer = 90;
+      if (!p1.alive) p2Score++;
+      if (!p2.alive) p1Score++;
+    }
+  } else {
+    // Keep updating surviving cat so gravity still works
+    if (p1.alive) updateCat(p1, p2, P1_CONTROLS, keys);
+    if (p2.alive) updateCat(p2, p1, P2_CONTROLS, p2Keys);
+    roundTimer--;
+    if (roundTimer <= 0) {
+      if (p1Score >= WIN_SCORE || p2Score >= WIN_SCORE) {
+        gameRunning = false;
+        showGameOver();
+        return;
+      }
+      resetRound();
+    }
+  }
+
+  updateParticles();
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============ INPUT ============
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+buildArena();
+showMainMenu();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

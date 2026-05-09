@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sushi Cat</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a0a1e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+canvas {
+  border: 3px solid #ff6b8a;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(255, 107, 138, 0.3);
+}
+#ui {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  color: white;
+  text-align: center;
+  pointer-events: none;
+}
+#ui.hidden { display: none; }
+#ui > * { pointer-events: auto; }
+h1 {
+  font-size: 52px;
+  color: #ff6b8a;
+  text-shadow: 3px 3px 0 #aa2244, 0 0 20px rgba(255, 107, 138, 0.5);
+  margin-bottom: 5px;
+}
+.subtitle { font-size: 18px; color: #ccc; margin-bottom: 20px; }
+.cat-big { font-size: 70px; margin-bottom: 5px; }
+button {
+  padding: 14px 44px; font-size: 20px; border: none; border-radius: 30px;
+  cursor: pointer; margin: 8px; font-weight: bold;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+button:hover { transform: scale(1.08); }
+.btn-play, .btn-retry {
+  background: linear-gradient(135deg, #ff6b8a, #ff8fa8);
+  color: #3a1020;
+  box-shadow: 0 4px 15px rgba(255, 107, 138, 0.5);
+}
+.info { color: #999; font-size: 14px; margin-top: 15px; line-height: 1.6; }
+.score-display { font-size: 28px; color: #ffcc44; margin: 10px 0; }
+.high-score { font-size: 16px; color: #aaa; margin-bottom: 15px; }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="900" height="650"></canvas>
+
+<div id="ui">
+  <div class="cat-big">🐱🍣</div>
+  <h1>Sushi Cat</h1>
+  <p class="subtitle">A cat who REALLY likes sushi</p>
+  <button class="btn-play" onclick="startGame()">Play</button>
+  <div class="info">
+    Arrow Keys / WASD - Move (up, down, left, right)<br>
+    Shift - Boost speed (costs food!)<br>
+    Eat sushi to grow longer!<br>
+    Don't hit other cats or yourself!
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+const W = canvas.width;
+const H = canvas.height;
+canvas.width = W * dpr;
+canvas.height = H * dpr;
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+ctx.scale(dpr, dpr);
+const ui = document.getElementById('ui');
+
+// Grid and map
+const GRID = 16;
+const MAP_COLS = 120;
+const MAP_ROWS = 90;
+const MAP_W = MAP_COLS * GRID;
+const MAP_H = MAP_ROWS * GRID;
+const TICK_RATE = 100;
+const BOOST_TICK_RATE = 50;
+let boosting = false;
+let boostDrainTimer = 0;
+const BOOST_DRAIN_INTERVAL = 2000; // lose 1 segment every 2 sec
+
+// Camera
+let camX = 0, camY = 0;
+
+// Game state
+let gameRunning = false;
+let frameCount = 0;
+let score = 0;
+let highScore = 0;
+let player = null;
+let cpus = [];
+let sushis = [];
+let particles = [];
+let deathParticles = [];
+let lastTick = 0;
+let tickLerp = 0;
+
+const SUSHI_TYPES = [
+  { name: 'salmon', color: '#ff8866', inner: '#ffaa88', points: 1 },
+  { name: 'tuna', color: '#dd4455', inner: '#ee6677', points: 1 },
+  { name: 'shrimp', color: '#ffaa66', inner: '#ffcc88', points: 1 },
+  { name: 'egg', color: '#ffdd44', inner: '#ffee88', points: 1 },
+  { name: 'eel', color: '#aa7733', inner: '#cc9955', points: 2 },
+  { name: 'special', color: '#ff44aa', inner: '#ff88cc', points: 3 },
+];
+
+const CPU_COLORS = [
+  { body: '#7788cc', head: '#8899dd', name: 'Blue' },
+  { body: '#77bb77', head: '#88cc88', name: 'Green' },
+  { body: '#cc77cc', head: '#dd88dd', name: 'Purple' },
+  { body: '#ccaa55', head: '#ddbb66', name: 'Gold' },
+  { body: '#cc6655', head: '#dd7766', name: 'Red' },
+  { body: '#55bbbb', head: '#66cccc', name: 'Teal' },
+  { body: '#bb8855', head: '#ccaa66', name: 'Brown' },
+  { body: '#aa66aa', head: '#bb77bb', name: 'Plum' },
+  { body: '#66aa99', head: '#77bbaa', name: 'Mint' },
+  { body: '#cc8888', head: '#ddaaaa', name: 'Pink' },
+  { body: '#8888bb', head: '#9999cc', name: 'Slate' },
+  { body: '#bbbb55', head: '#cccc66', name: 'Lime' },
+];
+const NUM_CPUS = 12;
+
+// Movement uses dx/dy directly for 8-way movement
+let keysDown = {};
+
+// ============ SNAKE ============
+function createSnake(x, y, dx, dy, color, headColor, isPlayer) {
+  return {
+    segments: [{ x, y }],
+    prevSegments: [{ x, y }],
+    dx, dy, prevDx: dx, prevDy: dy, nextDx: dx, nextDy: dy,
+    color, headColor, isPlayer,
+    alive: true, growQueue: 3, score: 0,
+    targetSushi: null, turnCooldown: 0,
+    mouthOpen: 0, eyeBlink: 0,
+  };
+}
+
+function snakeHead(s) { return s.segments[0]; }
+
+function moveSnake(s) {
+  if (!s.alive) return;
+  s.prevSegments = s.segments.map(seg => ({ x: seg.x, y: seg.y }));
+  s.prevDx = s.dx;
+  s.prevDy = s.dy;
+  s.dx = s.nextDx;
+  s.dy = s.nextDy;
+
+  const head = snakeHead(s);
+  const nx = head.x + s.dx;
+  const ny = head.y + s.dy;
+  const wx = ((nx % MAP_COLS) + MAP_COLS) % MAP_COLS;
+  const wy = ((ny % MAP_ROWS) + MAP_ROWS) % MAP_ROWS;
+
+  s.segments.unshift({ x: wx, y: wy });
+  if (s.growQueue > 0) {
+    s.growQueue--;
+    const tail = s.prevSegments[s.prevSegments.length - 1];
+    s.prevSegments.push({ x: tail.x, y: tail.y });
+  } else {
+    s.segments.pop();
+  }
+  s.mouthOpen = 3;
+}
+
+function setSnakeDir(s, dx, dy) {
+  if (dx === 0 && dy === 0) return; // must move somewhere
+  // Prevent reversing into your own neck
+  if (s.segments.length > 1) {
+    const head = s.segments[0];
+    const neck = s.segments[1];
+    if (head.x + dx === neck.x && head.y + dy === neck.y) return;
+  }
+  s.nextDx = dx;
+  s.nextDy = dy;
+}
+
+// ============ CPU AI ============
+// 4 cardinal directions for movement
+const ALL_DIRS = [
+  {dx:1,dy:0},{dx:0,dy:1},{dx:-1,dy:0},{dx:0,dy:-1}
+];
+
+function updateCPU(cpu) {
+  if (!cpu.alive) return;
+  cpu.turnCooldown--;
+  const head = snakeHead(cpu);
+
+  let bestDist = Infinity, bestSushi = null;
+  for (const sushi of sushis) {
+    const adx = Math.min(Math.abs(sushi.x - head.x), MAP_COLS - Math.abs(sushi.x - head.x));
+    const ady = Math.min(Math.abs(sushi.y - head.y), MAP_ROWS - Math.abs(sushi.y - head.y));
+    const dist = adx + ady;
+    if (dist < bestDist) { bestDist = dist; bestSushi = sushi; }
+  }
+  cpu.targetSushi = bestSushi;
+  if (!bestSushi || cpu.turnCooldown > 0) return;
+
+  const rawDx = bestSushi.x - head.x;
+  const rawDy = bestSushi.y - head.y;
+  // Find desired direction accounting for wrap
+  let wdx = Math.abs(rawDx) <= MAP_COLS / 2 ? Math.sign(rawDx) : -Math.sign(rawDx);
+  let wdy = Math.abs(rawDy) <= MAP_ROWS / 2 ? Math.sign(rawDy) : -Math.sign(rawDy);
+
+  // Try the axis with more distance first, then the other
+  const adx = Math.min(Math.abs(rawDx), MAP_COLS - Math.abs(rawDx));
+  const ady = Math.min(Math.abs(rawDy), MAP_ROWS - Math.abs(rawDy));
+  const candidates = adx >= ady
+    ? [{ dx: wdx, dy: 0 }, { dx: 0, dy: wdy }]
+    : [{ dx: 0, dy: wdy }, { dx: wdx, dy: 0 }];
+  // Filter out zero moves
+  const filtered = candidates.filter(d => d.dx !== 0 || d.dy !== 0);
+
+  for (const d of filtered) {
+    const nx = ((head.x + d.dx) % MAP_COLS + MAP_COLS) % MAP_COLS;
+    const ny = ((head.y + d.dy) % MAP_ROWS + MAP_ROWS) % MAP_ROWS;
+    if (isSafeCell(nx, ny, cpu)) {
+      setSnakeDir(cpu, d.dx, d.dy);
+      cpu.turnCooldown = 1;
+      return;
+    }
+  }
+  // Try any safe direction
+  const shuffled = ALL_DIRS.slice().sort(() => Math.random() - 0.5);
+  for (const d of shuffled) {
+    const nx = ((head.x + d.dx) % MAP_COLS + MAP_COLS) % MAP_COLS;
+    const ny = ((head.y + d.dy) % MAP_ROWS + MAP_ROWS) % MAP_ROWS;
+    if (isSafeCell(nx, ny, cpu)) {
+      setSnakeDir(cpu, d.dx, d.dy);
+      cpu.turnCooldown = 1;
+      return;
+    }
+  }
+}
+
+function isSafeCell(x, y, self) {
+  if (player && player.alive) {
+    for (const seg of player.segments) {
+      if (seg.x === x && seg.y === y) return false;
+    }
+  }
+  for (const cpu of cpus) {
+    if (!cpu.alive) continue;
+    for (let i = 0; i < cpu.segments.length; i++) {
+      if (cpu === self && i === 0) continue;
+      if (cpu.segments[i].x === x && cpu.segments[i].y === y) return false;
+    }
+  }
+  return true;
+}
+
+// ============ SUSHI ============
+function spawnSushi() {
+  let x, y, tries = 0;
+  do {
+    x = Math.floor(Math.random() * MAP_COLS);
+    y = Math.floor(Math.random() * MAP_ROWS);
+    tries++;
+  } while (tries < 100 && isCellOccupied(x, y));
+  const type = SUSHI_TYPES[Math.random() < 0.08 ? 5 : Math.random() < 0.15 ? 4 : Math.floor(Math.random() * 4)];
+  sushis.push({ x, y, type, age: 0, sparklePhase: Math.random() * Math.PI * 2 });
+}
+
+function isCellOccupied(x, y) {
+  if (player && player.alive) {
+    for (const seg of player.segments) { if (seg.x === x && seg.y === y) return true; }
+  }
+  for (const cpu of cpus) {
+    if (!cpu.alive) continue;
+    for (const seg of cpu.segments) { if (seg.x === x && seg.y === y) return true; }
+  }
+  for (const s of sushis) { if (s.x === x && s.y === y) return true; }
+  return false;
+}
+
+// ============ PARTICLES ============
+function spawnEatParticles(x, y, color) {
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x: x * GRID + GRID / 2, y: y * GRID + GRID / 2,
+      vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
+      life: 20 + Math.random() * 15, maxLife: 35,
+      color, size: 2 + Math.random() * 3,
+    });
+  }
+}
+
+function spawnDeathParticles(segments, color) {
+  for (const seg of segments) {
+    for (let i = 0; i < 3; i++) {
+      deathParticles.push({
+        x: seg.x * GRID + GRID / 2, y: seg.y * GRID + GRID / 2,
+        vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5 - 1,
+        life: 30 + Math.random() * 20, maxLife: 50,
+        color, size: 3 + Math.random() * 3,
+      });
+    }
+  }
+}
+
+function updateParticles(arr) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const p = arr[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life--;
+    if (p.life <= 0) arr.splice(i, 1);
+  }
+}
+
+// ============ COLLISION ============
+function checkCollisions() {
+  const allSnakes = [player, ...cpus].filter(s => s && s.alive);
+  for (const snake of allSnakes) {
+    const head = snakeHead(snake);
+    // Self collision (skip head)
+    for (let i = 1; i < snake.segments.length; i++) {
+      if (snake.segments[i].x === head.x && snake.segments[i].y === head.y) {
+        killSnake(snake); break;
+      }
+    }
+    if (!snake.alive) continue;
+    // Other snake collision
+    for (const other of allSnakes) {
+      if (other === snake || !other.alive) continue;
+      for (const seg of other.segments) {
+        if (seg.x === head.x && seg.y === head.y) { killSnake(snake); break; }
+      }
+      if (!snake.alive) break;
+    }
+    if (!snake.alive) continue;
+    // Eat sushi
+    for (let i = sushis.length - 1; i >= 0; i--) {
+      if (sushis[i].x === head.x && sushis[i].y === head.y) {
+        const s = sushis[i];
+        snake.growQueue += s.type.points;
+        snake.score += s.type.points;
+        snake.mouthOpen = 5;
+        spawnEatParticles(s.x, s.y, s.type.color);
+        sushis.splice(i, 1);
+        if (snake.isPlayer) score += s.type.points;
+      }
+    }
+  }
+}
+
+function killSnake(snake) {
+  snake.alive = false;
+  spawnDeathParticles(snake.segments, snake.color);
+  for (let i = 2; i < snake.segments.length; i += 3) {
+    const seg = snake.segments[i];
+    const type = SUSHI_TYPES[Math.floor(Math.random() * 4)];
+    sushis.push({ x: seg.x, y: seg.y, type, age: 0, sparklePhase: Math.random() * Math.PI * 2 });
+  }
+  if (snake.isPlayer) {
+    gameRunning = false;
+    if (score > highScore) highScore = score;
+    setTimeout(showGameOver, 500);
+  } else {
+    setTimeout(() => respawnCPU(snake), 3000);
+  }
+}
+
+function respawnCPU(cpu) {
+  if (!gameRunning) return;
+  let x, y, tries = 0;
+  do {
+    x = Math.floor(Math.random() * MAP_COLS);
+    y = Math.floor(Math.random() * MAP_ROWS);
+    tries++;
+  } while (tries < 100 && isCellOccupied(x, y));
+  cpu.segments = [{ x, y }];
+  cpu.prevSegments = [{ x, y }];
+  const d = ALL_DIRS[Math.floor(Math.random() * 8)];
+  cpu.dx = d.dx; cpu.dy = d.dy;
+  cpu.prevDx = d.dx; cpu.prevDy = d.dy;
+  cpu.nextDx = d.dx; cpu.nextDy = d.dy;
+  cpu.alive = true;
+  cpu.growQueue = 3;
+  cpu.score = 0;
+}
+
+// ============ CAMERA ============
+function updateCamera() {
+  if (!player || !player.alive) return;
+  const head = lerpSeg(player, 0);
+  const targetX = head.x - W / 2;
+  const targetY = head.y - H / 2;
+  camX += (targetX - camX) * 0.12;
+  camY += (targetY - camY) * 0.12;
+}
+
+// ============ DRAWING ============
+function lerpSeg(snake, i) {
+  const cur = snake.segments[i];
+  const prev = snake.prevSegments && snake.prevSegments[i] ? snake.prevSegments[i] : cur;
+  let dx = cur.x - prev.x;
+  let dy = cur.y - prev.y;
+  let px, py;
+  if (Math.abs(dx) > MAP_COLS / 2 || Math.abs(dy) > MAP_ROWS / 2) {
+    px = cur.x * GRID + GRID / 2;
+    py = cur.y * GRID + GRID / 2;
+  } else {
+    px = (prev.x + dx * tickLerp) * GRID + GRID / 2;
+    py = (prev.y + dy * tickLerp) * GRID + GRID / 2;
+  }
+  return { x: px, y: py };
+}
+
+function isOnScreen(px, py, margin) {
+  return px > camX - margin && px < camX + W + margin && py > camY - margin && py < camY + H + margin;
+}
+
+function drawGrid() {
+  const bg = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, W * 0.7);
+  bg.addColorStop(0, '#2a1838');
+  bg.addColorStop(1, '#160e20');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Dot grid offset by camera
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+  const startX = GRID - (camX % GRID + GRID) % GRID;
+  const startY = GRID - (camY % GRID + GRID) % GRID;
+  for (let x = startX; x < W; x += GRID) {
+    for (let y = startY; y < H; y += GRID) {
+      ctx.beginPath();
+      ctx.arc(x, y, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Map border (visible if near edge)
+  ctx.strokeStyle = 'rgba(255, 100, 140, 0.3)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-camX, -camY, MAP_W, MAP_H);
+}
+
+function drawSushi(s) {
+  const sx = s.x * GRID + GRID / 2 - camX;
+  const sy = s.y * GRID + GRID / 2 - camY;
+  if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) return;
+
+  const bob = Math.sin(frameCount * 0.06 + s.sparklePhase) * 2;
+  const pulse = 1 + Math.sin(frameCount * 0.1 + s.sparklePhase) * 0.05;
+  const r = GRID * 0.42 * pulse;
+
+  ctx.save();
+  ctx.translate(sx, sy + bob);
+
+  // Glow
+  ctx.fillStyle = `rgba(255, 255, 200, ${0.12 + Math.sin(frameCount * 0.08 + s.sparklePhase) * 0.05})`;
+  ctx.beginPath(); ctx.arc(0, 2, r + 4, 0, Math.PI * 2); ctx.fill();
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.beginPath(); ctx.ellipse(0, 4, r * 0.8, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Rice
+  ctx.fillStyle = '#f8f4e8';
+  ctx.beginPath(); ctx.ellipse(0, 1, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#eee8d8';
+  for (let d = 0; d < 3; d++) { ctx.beginPath(); ctx.arc(-3 + d * 3, 2, 1, 0, Math.PI * 2); ctx.fill(); }
+
+  // Topping
+  ctx.fillStyle = s.type.color;
+  ctx.beginPath(); ctx.ellipse(0, -1, r * 0.88, r * 0.58, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = s.type.inner;
+  ctx.beginPath(); ctx.ellipse(-1, -2.5, r * 0.45, r * 0.28, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.ellipse(-2, -3, r * 0.2, r * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
+
+  // Nori band
+  if (s.type.name === 'eel' || s.type.name === 'special') {
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-2.5, -r * 0.5, 5, r);
+    ctx.fillStyle = '#2a2a2a'; ctx.fillRect(-2, -r * 0.5, 4, r);
+  }
+
+  // Special sparkles
+  if (s.type.name === 'special') {
+    ctx.fillStyle = '#ffee44';
+    const sa = frameCount * 0.1 + s.sparklePhase;
+    for (let i = 0; i < 5; i++) {
+      const a = sa + i * 1.26;
+      const sr = r + 5 + Math.sin(a * 2) * 2;
+      ctx.globalAlpha = 0.6 + Math.sin(a * 2) * 0.4;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * sr, Math.sin(a) * sr, 1.2 + Math.sin(a * 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (s.type.points >= 2) {
+    ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+    ctx.globalAlpha = 0.7 + Math.sin(frameCount * 0.1) * 0.3;
+    ctx.fillText(`+${s.type.points}`, 0, -r - 5);
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+
+function drawSnake(snake) {
+  if (!snake.alive) return;
+  const segs = snake.segments;
+  const len = segs.length;
+
+  const pos = [];
+  for (let i = 0; i < len; i++) {
+    const p = lerpSeg(snake, i);
+    pos.push({ x: p.x - camX, y: p.y - camY });
+  }
+
+  // Body
+  if (len > 1) {
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = len - 1; i >= 1; i--) {
+      const a = pos[i], b = pos[i - 1];
+      if (Math.abs(a.x - b.x) > GRID * 3 || Math.abs(a.y - b.y) > GRID * 3) continue;
+      const t = 1 - i / (len + 4);
+      const thickness = GRID * (0.35 + t * 0.35);
+      ctx.strokeStyle = snake.color; ctx.lineWidth = thickness;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = snake.headColor; ctx.lineWidth = thickness * 0.35;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    // Stripe markings
+    for (let i = len - 1; i >= 1; i--) {
+      if (i % 4 !== 0) continue;
+      const p = pos[i];
+      const t = 1 - i / (len + 4);
+      ctx.fillStyle = snake.headColor; ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.arc(p.x, p.y, GRID * 0.12 * (0.5 + t * 0.5), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Tail tip
+  if (len > 1) {
+    const tail = pos[len - 1], prev = pos[len - 2];
+    if (Math.abs(tail.x - prev.x) <= GRID * 3 && Math.abs(tail.y - prev.y) <= GRID * 3) {
+      const angle = Math.atan2(tail.y - prev.y, tail.x - prev.x);
+      ctx.save(); ctx.translate(tail.x, tail.y); ctx.rotate(angle);
+      ctx.fillStyle = snake.color;
+      ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-4, -4); ctx.quadraticCurveTo(-2, 0, -4, 4); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Cat head
+  const hp = pos[0];
+  const targetAngle = Math.atan2(snake.dy, snake.dx);
+  const prevAngle = Math.atan2(snake.prevDy, snake.prevDx);
+  let angleDiff = targetAngle - prevAngle;
+  if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  const headAngle = prevAngle + angleDiff * tickLerp;
+
+  ctx.save();
+  ctx.translate(hp.x, hp.y);
+  ctx.rotate(headAngle);
+  const hr = GRID * 0.58;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath(); ctx.ellipse(1, 2, hr, hr * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  // Head
+  ctx.fillStyle = snake.headColor;
+  ctx.beginPath(); ctx.ellipse(1, 0, hr, hr * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  // Darker fur top
+  ctx.fillStyle = snake.color;
+  ctx.beginPath(); ctx.ellipse(0, 0, hr * 0.8, hr * 0.5, 0, Math.PI, Math.PI * 2); ctx.fill();
+
+  // Ears
+  ctx.fillStyle = snake.color;
+  ctx.beginPath(); ctx.moveTo(-4, -hr + 4); ctx.lineTo(0, -hr - 7); ctx.lineTo(6, -hr + 4); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-4, hr - 4); ctx.lineTo(0, hr + 7); ctx.lineTo(6, hr - 4); ctx.fill();
+  ctx.fillStyle = '#ffaaaa';
+  ctx.beginPath(); ctx.moveTo(-2, -hr + 5); ctx.lineTo(1, -hr - 4); ctx.lineTo(4, -hr + 5); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-2, hr - 5); ctx.lineTo(1, hr + 4); ctx.lineTo(4, hr - 5); ctx.fill();
+
+  // Cheeks
+  ctx.fillStyle = snake.headColor;
+  ctx.beginPath(); ctx.ellipse(-2, -hr * 0.4, 4, 3, -0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-2, hr * 0.4, 4, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+
+  // Eyes
+  const blink = snake.eyeBlink > 0;
+  const eyeX = 3, eyeY = 4;
+  if (blink) {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(eyeX, -eyeY, 2.5, 0.3, Math.PI - 0.3); ctx.stroke();
+    ctx.beginPath(); ctx.arc(eyeX, eyeY, 2.5, 0.3, Math.PI - 0.3); ctx.stroke();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(eyeX, -eyeY, 3.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(eyeX, eyeY, 3.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    const irisColor = snake.isPlayer ? '#44bb55' : '#ddaa33';
+    ctx.fillStyle = irisColor;
+    ctx.beginPath(); ctx.arc(eyeX + 1, -eyeY, 2.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(eyeX + 1, eyeY, 2.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(eyeX + 1.2, -eyeY, 0.8, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(eyeX + 1.2, eyeY, 0.8, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(eyeX + 2, -eyeY - 1, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(eyeX + 2, eyeY - 1, 1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = '#ee8888';
+  ctx.beginPath(); ctx.moveTo(hr - 2, 0); ctx.lineTo(hr - 5, -2); ctx.lineTo(hr - 5, 2); ctx.fill();
+
+  // Mouth
+  if (snake.mouthOpen > 0) {
+    ctx.fillStyle = '#cc3344';
+    ctx.beginPath(); ctx.ellipse(hr - 4, 0, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ee6677';
+    ctx.beginPath(); ctx.ellipse(hr - 3, 0, 1.5, 1, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#777'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hr - 3, 0); ctx.lineTo(hr - 5, -2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hr - 3, 0); ctx.lineTo(hr - 5, 2); ctx.stroke();
+  }
+
+  // Whiskers
+  ctx.strokeStyle = 'rgba(200, 200, 200, 0.7)'; ctx.lineWidth = 0.7;
+  const wt = Math.sin(frameCount * 0.06) * 0.5;
+  ctx.beginPath(); ctx.moveTo(1, -6); ctx.quadraticCurveTo(-5, -8 + wt, -12, -9 + wt); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1, -4); ctx.quadraticCurveTo(-5, -4 + wt, -12, -3 + wt); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1, 6); ctx.quadraticCurveTo(-5, 8 - wt, -12, 9 - wt); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1, 4); ctx.quadraticCurveTo(-5, 4 - wt, -12, 3 - wt); ctx.stroke();
+
+  // Player blush
+  if (snake.isPlayer) {
+    ctx.fillStyle = 'rgba(255, 130, 130, 0.3)';
+    ctx.beginPath(); ctx.ellipse(-2, -7, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-2, 7, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawParticles(arr) {
+  for (const p of arr) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x - camX, p.y - camY, p.size * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, W, 30);
+  ctx.fillStyle = '#ffcc44'; ctx.font = 'bold 16px Arial';
+  ctx.fillText(`Score: ${score}`, 10, 21);
+  ctx.fillStyle = '#ff8fa8';
+  if (player && player.alive) ctx.fillText(`Length: ${player.segments.length}`, 130, 21);
+  // Boost indicator
+  if (boosting && player && player.alive) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('BOOST!', 250, 21);
+    // Drain bar
+    const pct = 1 - boostDrainTimer / BOOST_DRAIN_INTERVAL;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(310, 12, 60, 10);
+    ctx.fillStyle = '#ff6666';
+    ctx.fillRect(310, 12, 60 * pct, 10);
+  }
+
+  ctx.fillStyle = '#aaa'; ctx.font = '14px Arial';
+  ctx.fillText(`Best: ${highScore}`, W - 80, 21);
+}
+
+function drawMinimap() {
+  const mmW = 120, mmH = 90;
+  const mx = W - mmW - 10, my = 38;
+  const scaleX = mmW / MAP_COLS, scaleY = mmH / MAP_ROWS;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(mx - 1, my - 1, mmW + 2, mmH + 2);
+  ctx.fillStyle = 'rgba(30, 20, 40, 0.8)';
+  ctx.fillRect(mx, my, mmW, mmH);
+
+  // Sushi dots
+  ctx.fillStyle = 'rgba(255, 200, 100, 0.5)';
+  for (const s of sushis) {
+    ctx.fillRect(mx + s.x * scaleX, my + s.y * scaleY, 1.5, 1.5);
+  }
+
+  // CPU dots
+  for (const cpu of cpus) {
+    if (!cpu.alive) continue;
+    ctx.fillStyle = cpu.headColor;
+    const h = snakeHead(cpu);
+    ctx.fillRect(mx + h.x * scaleX - 1, my + h.y * scaleY - 1, 3, 3);
+  }
+
+  // Player dot (bright)
+  if (player && player.alive) {
+    ctx.fillStyle = '#ffcc44';
+    const h = snakeHead(player);
+    ctx.fillRect(mx + h.x * scaleX - 1.5, my + h.y * scaleY - 1.5, 4, 4);
+  }
+
+  // Viewport rectangle
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(mx + camX / GRID * scaleX, my + camY / GRID * scaleY,
+    W / GRID * scaleX, H / GRID * scaleY);
+
+  // Border
+  ctx.strokeStyle = 'rgba(255, 100, 140, 0.3)';
+  ctx.strokeRect(mx, my, mmW, mmH);
+}
+
+function drawLeaderboard() {
+  if (!player) return;
+  const all = [
+    { name: 'You', len: player.segments.length, alive: player.alive, color: '#ff8fa8' },
+    ...cpus.map((c, i) => ({ name: CPU_COLORS[i].name, len: c.segments.length, alive: c.alive, color: c.headColor }))
+  ].sort((a, b) => b.len - a.len).slice(0, 8);
+
+  const lx = 8, ly = 38;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.fillRect(lx, ly, 90, all.length * 15 + 6);
+  ctx.font = '11px Arial';
+  for (let i = 0; i < all.length; i++) {
+    ctx.fillStyle = all[i].alive ? all[i].color : '#555';
+    ctx.fillText(`${i + 1}. ${all[i].name}: ${all[i].len}`, lx + 5, ly + 14 + i * 15);
+  }
+}
+
+// ============ GAME OVER ============
+function showGameOver() {
+  ui.classList.remove('hidden');
+  ui.innerHTML = `
+    <div class="cat-big">😿🍣</div>
+    <h1>Game Over!</h1>
+    <div class="score-display">Score: ${score}</div>
+    <div class="high-score">Best: ${highScore} | Length: ${player.segments.length}</div>
+    <button class="btn-retry" onclick="startGame()">Play Again</button>
+    <div class="info">Arrow Keys to move | Shift to boost | Eat sushi, avoid everyone!</div>
+  `;
+}
+
+// ============ GAME LOOP ============
+function startGame() {
+  ui.classList.add('hidden');
+  score = 0; frameCount = 0;
+  particles = []; deathParticles = []; sushis = [];
+  boosting = false; boostDrainTimer = 0;
+
+  keysDown = {};
+  player = createSnake(Math.floor(MAP_COLS / 2), Math.floor(MAP_ROWS / 2), 1, 0, '#e8a040', '#f0c060', true);
+  player.growQueue = 10; // start with some food
+
+  cpus = [];
+  for (let i = 0; i < NUM_CPUS; i++) {
+    const angle = (i / NUM_CPUS) * Math.PI * 2;
+    const dist = 25 + Math.random() * 15;
+    const cx = Math.floor(MAP_COLS / 2 + Math.cos(angle) * dist);
+    const cy = Math.floor(MAP_ROWS / 2 + Math.sin(angle) * dist);
+    const d = ALL_DIRS[Math.floor(Math.random() * ALL_DIRS.length)];
+    cpus.push(createSnake(
+      ((cx % MAP_COLS) + MAP_COLS) % MAP_COLS,
+      ((cy % MAP_ROWS) + MAP_ROWS) % MAP_ROWS,
+      d.dx, d.dy, CPU_COLORS[i].body, CPU_COLORS[i].head, false
+    ));
+  }
+
+  for (let i = 0; i < 40; i++) spawnSushi();
+
+  // Center camera on player
+  const head = snakeHead(player);
+  camX = head.x * GRID + GRID / 2 - W / 2;
+  camY = head.y * GRID + GRID / 2 - H / 2;
+
+  gameRunning = true;
+  lastTick = performance.now();
+}
+
+function gameTick() {
+  if (!gameRunning) return;
+  updatePlayerDirection();
+  for (const cpu of cpus) updateCPU(cpu);
+  moveSnake(player);
+  for (const cpu of cpus) moveSnake(cpu);
+  checkCollisions();
+  while (sushis.length < 30 + Math.floor(score / 5)) spawnSushi();
+  if (Math.random() < 0.02) player.eyeBlink = 8;
+  for (const cpu of cpus) { if (Math.random() < 0.02) cpu.eyeBlink = 8; }
+}
+
+function draw() {
+  drawGrid();
+  if (!player) return;
+
+  for (const s of sushis) { s.age++; drawSushi(s); }
+  for (const cpu of cpus) drawSnake(cpu);
+  drawSnake(player);
+  drawParticles(particles);
+  drawParticles(deathParticles);
+  drawHUD();
+  drawMinimap();
+  drawLeaderboard();
+}
+
+function gameLoop(now) {
+  frameCount++;
+  const currentRate = boosting ? BOOST_TICK_RATE : TICK_RATE;
+  if (gameRunning && now - lastTick >= currentRate) {
+    gameTick();
+    lastTick = now;
+  }
+  tickLerp = Math.min(1, (now - lastTick) / currentRate);
+
+  // Boost drain: lose 1 segment every 2 seconds while boosting
+  if (gameRunning && boosting && player && player.alive) {
+    boostDrainTimer += 16; // ~60fps
+    if (boostDrainTimer >= BOOST_DRAIN_INTERVAL) {
+      boostDrainTimer -= BOOST_DRAIN_INTERVAL;
+      if (player.segments.length > 2) {
+        const tail = player.segments.pop();
+        // Drop the lost segment as sushi
+        const type = SUSHI_TYPES[Math.floor(Math.random() * 4)];
+        sushis.push({ x: tail.x, y: tail.y, type, age: 0, sparklePhase: Math.random() * Math.PI * 2 });
+        spawnEatParticles(tail.x, tail.y, '#ff4444');
+        if (player.prevSegments.length > player.segments.length) {
+          player.prevSegments.pop();
+        }
+      }
+    }
+  }
+
+  if (player) {
+    if (player.mouthOpen > 0) player.mouthOpen--;
+    if (player.eyeBlink > 0) player.eyeBlink--;
+  }
+  for (const cpu of cpus) {
+    if (cpu.mouthOpen > 0) cpu.mouthOpen--;
+    if (cpu.eyeBlink > 0) cpu.eyeBlink--;
+  }
+  updateParticles(particles);
+  updateParticles(deathParticles);
+  updateCamera();
+
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============ INPUT ============
+// Arrow keys / WASD = absolute directions. Shift = boost.
+window.addEventListener('keydown', e => {
+  keysDown[e.key] = true;
+  if (e.key === 'Shift') boosting = true;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  keysDown[e.key] = false;
+  if (e.key === 'Shift') boosting = false;
+});
+
+function updatePlayerDirection() {
+  if (!player || !player.alive) return;
+  if (keysDown['ArrowRight'] || keysDown['d']) setSnakeDir(player, 1, 0);
+  else if (keysDown['ArrowLeft'] || keysDown['a']) setSnakeDir(player, -1, 0);
+  else if (keysDown['ArrowDown'] || keysDown['s']) setSnakeDir(player, 0, 1);
+  else if (keysDown['ArrowUp'] || keysDown['w']) setSnakeDir(player, 0, -1);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

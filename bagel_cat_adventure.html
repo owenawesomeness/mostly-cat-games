@@ -1,0 +1,4830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bagel Cat Adventure</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Orbitron', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  canvas {
+    border: 3px solid #e94560;
+    border-radius: 8px;
+    image-rendering: pixelated;
+  }
+  #ui-overlay {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 18px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  }
+  #start-screen, #death-screen, #win-screen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    z-index: 10;
+  }
+  #start-screen h1, #win-screen h1 {
+    font-size: 36px;
+    margin-bottom: 5px;
+    color: #e9a040;
+    text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+  }
+  #start-screen h2 {
+    font-size: 18px;
+    color: #ccc;
+    margin-bottom: 10px;
+  }
+  .btn {
+    padding: 15px 40px;
+    font-size: 22px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin: 10px;
+    font-weight: bold;
+    transition: transform 0.1s;
+    pointer-events: all;
+  }
+  .btn:hover { transform: scale(1.05); }
+  .btn-play {
+    background: #e94560;
+    color: white;
+  }
+  .controls-info {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .controls-info span {
+    background: #333;
+    padding: 4px 12px;
+    border-radius: 5px;
+    border: 1px solid #555;
+    font-family: monospace;
+  }
+  #death-screen h2 { font-size: 36px; color: #e94560; margin-bottom: 20px; }
+  #death-screen p { font-size: 18px; color: #aaa; margin-bottom: 20px; }
+  #win-screen p { font-size: 20px; color: #aaa; margin: 15px 0; }
+  .level-select {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px 0;
+    max-width: 850px;
+  }
+  .level-card {
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
+    text-align: center;
+    width: 130px;
+  }
+  .level-card:hover {
+    transform: scale(1.07);
+    border-color: #e94560;
+    background: rgba(233,69,96,0.15);
+  }
+  .level-num {
+    font-size: 30px;
+    font-weight: bold;
+    color: #e9a040;
+    line-height: 1;
+  }
+  .level-name {
+    font-size: 13px;
+    color: #fff;
+    margin: 5px 0 3px;
+    font-weight: bold;
+  }
+  .level-desc {
+    font-size: 10px;
+    color: #999;
+  }
+  .hint-box {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ffcc00;
+    font-size: 16px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .hint-box.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="start-screen">
+  <h1>Bagel Cat Adventure</h1>
+  <h2>A Puzzle Platformer</h2>
+  <div class="level-select">
+    <div class="level-card" onclick="startLevel(1)">
+      <div class="level-num">1</div>
+      <div class="level-name">Puzzle Plains</div>
+      <div class="level-desc">Keys, gravity flips, and saws</div>
+    </div>
+    <div class="level-card" onclick="startLevel(2)">
+      <div class="level-num">2</div>
+      <div class="level-name">Catapult Canyon</div>
+      <div class="level-desc">Launch through the sky!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(3)">
+      <div class="level-num">3</div>
+      <div class="level-name">Windy Heights</div>
+      <div class="level-desc">Grapple and ride the wind!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(4)">
+      <div class="level-num">4</div>
+      <div class="level-name">Frozen Slide</div>
+      <div class="level-desc">Slide on ice, no stopping!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(5)">
+      <div class="level-num">5</div>
+      <div class="level-name">Laser Lab</div>
+      <div class="level-desc">Dodge lasers and ride belts!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(6)">
+      <div class="level-num">6</div>
+      <div class="level-name">Shadow Caves</div>
+      <div class="level-desc">Darkness and portals!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(7)">
+      <div class="level-num">7</div>
+      <div class="level-name">Sky Fortress</div>
+      <div class="level-desc">The ultimate challenge!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(8)">
+      <div class="level-num">8</div>
+      <div class="level-name">Crumble Run</div>
+      <div class="level-desc">Everything falls apart!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(9)">
+      <div class="level-num">9</div>
+      <div class="level-name">Mirror Maze</div>
+      <div class="level-desc">Reverse zones flip controls!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(10)">
+      <div class="level-num">10</div>
+      <div class="level-name">Lava Climb</div>
+      <div class="level-desc">Rising lava! Go up fast!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(11)">
+      <div class="level-num">11</div>
+      <div class="level-name">Bagel Gauntlet</div>
+      <div class="level-desc">The FINAL final challenge!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(12)" style="border-color: #ffdd00;">
+      <div class="level-num" style="color: #ffdd00;">B</div>
+      <div class="level-name">Ice Sprint</div>
+      <div class="level-desc">BONUS! Beat the clock!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(13)" style="border-color: #88ddff;">
+      <div class="level-num" style="color: #88ddff;">B2</div>
+      <div class="level-name">Smooth Glide</div>
+      <div class="level-desc">BONUS! Just vibe and slide!</div>
+    </div>
+    <div class="level-card" onclick="startLevel(14)" style="border-color: #ff6644;">
+      <div class="level-num" style="color: #ff6644;">B3</div>
+      <div class="level-name">Temporal Gauntlet</div>
+      <div class="level-desc">BONUS! Lasers &amp; timed doors</div>
+    </div>
+    <div class="level-card" onclick="startLevel(15)" style="border-color: #ff8844;">
+      <div class="level-num" style="color: #ff8844;">B4</div>
+      <div class="level-name">Conveyor Chaos</div>
+      <div class="level-desc">BONUS! Belts &amp; buttons</div>
+    </div>
+    <div class="level-card" onclick="startLevel(16)" style="border-color: #cc66ff;">
+      <div class="level-num" style="color: #cc66ff;">B5</div>
+      <div class="level-name">Portal Rush</div>
+      <div class="level-desc">BONUS! Warp &amp; dash</div>
+    </div>
+    <div class="level-card" onclick="startLevel(17)" style="border-color: #44ddaa;">
+      <div class="level-num" style="color: #44ddaa;">B6</div>
+      <div class="level-name">Gravity Tick</div>
+      <div class="level-desc">BONUS! Flip &amp; time it</div>
+    </div>
+    <div class="level-card" onclick="startLevel(18)" style="border-color: #ff4488;">
+      <div class="level-num" style="color: #ff4488;">B7</div>
+      <div class="level-name">Wind &amp; Lasers</div>
+      <div class="level-desc">BONUS! Blown through beams</div>
+    </div>
+    <div class="level-card" onclick="startLevel(19)" style="border-color: #ffaa00;">
+      <div class="level-num" style="color: #ffaa00;">B8</div>
+      <div class="level-name">Time Master</div>
+      <div class="level-desc">BONUS! The ultimate mix</div>
+    </div>
+  </div>
+  <div class="controls-info">
+    <span>&larr;</span> <span>&rarr;</span> Move &nbsp;&nbsp;
+    <span>&uarr;</span> Jump &nbsp;&nbsp;
+    <span>R</span> Restart from checkpoint<br>
+    Hold <span>D</span> + arrows to dance!<br><br>
+    Collect keys, solve puzzles, avoid obstacles!
+  </div>
+</div>
+
+<div id="death-screen" style="display:none">
+  <h2>Oh no!</h2>
+  <p id="death-msg">Bagel Cat got squished!</p>
+  <button class="btn btn-play" onclick="respawn()">Try Again</button>
+</div>
+
+<div id="win-screen" style="display:none">
+  <canvas id="win-canvas" width="900" height="550"></canvas>
+  <div id="win-buttons" style="position:absolute;bottom:30px;display:none;z-index:20;">
+    <button class="btn btn-play" id="next-level-btn" style="display:none;" onclick="nextLevel()">Next Level</button>
+    <button class="btn btn-play" id="play-again-btn" onclick="resetGame()">Play Again</button>
+  </div>
+</div>
+
+<div class="hint-box" id="hint-box"></div>
+
+<script>
+// ============ SETUP ============
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 900, H = 550;
+canvas.width = W;
+canvas.height = H;
+
+// ============ GAME STATE ============
+let gameRunning = false;
+let deaths = 0;
+let startTime = 0;
+let keys = {};
+let camera = { x: 0, y: 0 };
+let hintTimer = 0;
+let hintText = '';
+let particles = [];
+let frameCount = 0;
+let currentLevel = 1;
+const MAX_LEVEL = 19;
+
+// Player
+let player = {
+  x: 100, y: 300, w: 40, h: 44,
+  vx: 0, vy: 0,
+  onGround: false,
+  gravityDir: 1, // 1 = normal, -1 = flipped
+  alive: true,
+  facingRight: true,
+  tailWag: 0,
+  collectedKeys: new Set(),
+  switchesHit: [],
+  gravFlipCooldown: 0,
+  catapultLaunch: false,
+  hasDoubleJump: false,
+  grappling: false,
+  grappleTarget: null,
+  grappleLen: 0,
+  grappleAngle: 0,
+};
+
+let checkpointX = 100;
+let checkpointY = 300;
+let checkpointKeys = new Set();
+let checkpointSwitches = [];
+let checkpointGravity = 1;
+
+const GRAVITY = 0.6;
+const JUMP_FORCE = -12;
+const MOVE_SPEED = 4.5;
+const FRICTION = 0.85;
+const MAX_FALL = 12;
+
+// ============ LEVEL DATA ============
+// Platform types: 'solid', 'fake' (falls when touched), 'ice' (slippery), 'bounce'
+// Obstacle types: 'spike', 'saw', 'laser'
+// Special: 'checkpoint', 'key', 'gate', 'gravity_flip', 'switch', 'switch_door', 'finish'
+
+let platforms = [];
+let obstacles = [];
+let specials = [];
+let levelObjects = []; // dynamic objects like falling platforms
+
+function buildLevel() {
+  platforms = [];
+  obstacles = [];
+  specials = [];
+  levelObjects = [];
+  if (currentLevel === 1) buildLevel1();
+  else if (currentLevel === 2) buildLevel2();
+  else if (currentLevel === 3) buildLevel3();
+  else if (currentLevel === 4) buildLevel4();
+  else if (currentLevel === 5) buildLevel5();
+  else if (currentLevel === 6) buildLevel6();
+  else if (currentLevel === 7) buildLevel7();
+  else if (currentLevel === 8) buildLevel8();
+  else if (currentLevel === 9) buildLevel9();
+  else if (currentLevel === 10) buildLevel10();
+  else if (currentLevel === 11) buildLevel11();
+  else if (currentLevel === 12) buildLevel12();
+  else if (currentLevel === 13) buildLevel13();
+  else if (currentLevel === 14) buildLevel14();
+  else if (currentLevel === 15) buildLevel15();
+  else if (currentLevel === 16) buildLevel16();
+  else if (currentLevel === 17) buildLevel17();
+  else if (currentLevel === 18) buildLevel18();
+  else if (currentLevel === 19) buildLevel19();
+}
+
+function levelHelpers() {
+  const P = (x, y, w, h, type='solid', color='#4a6741') => platforms.push({x,y,w,h,type,color,originalY:y,fallTimer:-1,fallen:false});
+  const O = (x, y, w, h, type='spike', dir='up') => obstacles.push({x,y,w,h,type,dir,active:true,phase:Math.random()*Math.PI*2});
+  const S = (x, y, type, data={}) => specials.push({x,y,w:30,h:30,type,collected:false,active:true,...data});
+  return { P, O, S };
+}
+
+function buildLevel1() {
+  const { P, O, S } = levelHelpers();
+
+  // ===== SECTION 1: Tutorial Ground =====
+  // Ground
+  P(0, 460, 1200, 80, 'solid', '#4a6741');
+  // Small platforms to learn jumping
+  P(350, 380, 100, 20, 'solid', '#5a7751');
+  P(500, 310, 100, 20, 'solid', '#5a7751');
+  P(680, 260, 120, 20, 'solid', '#5a7751');
+
+  // First easy spikes
+  O(300, 440, 40, 20, 'spike', 'up');
+
+  // Hint sign
+  S(50, 420, 'sign', {message: "Arrow keys to move, UP to jump!"});
+
+  // Checkpoint 1
+  S(800, 220, 'checkpoint');
+
+  // ===== SECTION 2: Color Key Puzzle =====
+  P(850, 460, 600, 80, 'solid', '#4a6741');
+  // Red key on a platform above
+  P(950, 340, 80, 20, 'solid', '#5a7751');
+  S(970, 305, 'key', {color: 'red'});
+  // Red gate blocking the path
+  S(1200, -40, 'gate', {color: 'red', w: 20, h: 500});
+  // Some spikes to make it interesting
+  O(1050, 440, 40, 20, 'spike', 'up');
+  O(1100, 440, 40, 20, 'spike', 'up');
+
+  S(900, 420, 'sign', {message: "Collect the RED key to open the RED gate!"});
+
+  // Checkpoint 2
+  S(1300, 420, 'checkpoint');
+
+  // Jump orb
+  S(1200, 380, 'jump_orb');
+
+  // ===== SECTION 3: Fake Platform Puzzle =====
+  P(1350, 460, 200, 80, 'solid', '#4a6741');
+  // Gap with platforms - some are fake!
+  // Real ones have small dots on them (visual clue)
+  P(1600, 400, 80, 20, 'solid', '#6a5741'); // real - brownish
+  P(1700, 400, 80, 20, 'fake', '#6a5741');  // FAKE
+  P(1800, 350, 80, 20, 'solid', '#6a5741'); // real
+  P(1900, 350, 80, 20, 'fake', '#6a5741');  // FAKE
+  P(2000, 300, 80, 20, 'solid', '#6a5741'); // real
+  P(2050, 400, 80, 20, 'solid', '#6a5741'); // real - safe landing
+
+  // Bottomless pit (death zone below)
+  O(1550, 520, 600, 40, 'pit', 'up');
+
+  S(1400, 420, 'sign', {message: "Watch out! Cracked platforms will FALL! Look for the cracks..."});
+
+  // Checkpoint 3
+  P(2100, 460, 300, 80, 'solid', '#4a6741');
+  S(2200, 420, 'checkpoint');
+
+  // ===== SECTION 4: Gravity Flip Section =====
+  P(2350, 460, 150, 80, 'solid', '#4a6741');
+  // Ceiling
+  P(2500, 50, 800, 20, 'solid', '#41504a');
+  // Floor
+  P(2500, 460, 800, 80, 'solid', '#4a6741');
+
+  // Gravity flip pad
+  S(2450, 425, 'gravity_flip');
+  S(2410, 420, 'sign', {message: "Step on the purple pad to flip gravity!"});
+
+  // Obstacles on floor AND ceiling
+  O(2600, 440, 40, 20, 'spike', 'up');
+  O(2600, 70, 40, 20, 'spike', 'down');
+  O(2750, 440, 40, 20, 'spike', 'up');
+  O(2750, 70, 40, 20, 'spike', 'down');
+  O(2900, 440, 60, 20, 'spike', 'up');
+  O(2900, 70, 60, 20, 'spike', 'down');
+
+  // Need to flip gravity to navigate between ceiling and floor spikes
+  S(2700, 425, 'gravity_flip');
+  S(2700, 85, 'gravity_flip');
+  S(2850, 425, 'gravity_flip');
+  S(2850, 85, 'gravity_flip');
+  S(3000, 425, 'gravity_flip');
+  S(3000, 85, 'gravity_flip');
+
+  // Gravity normalizer at end
+  S(3200, 425, 'gravity_normal');
+
+  P(3200, 460, 300, 80, 'solid', '#4a6741');
+  S(3300, 420, 'checkpoint');
+
+  // ===== SECTION 5: Switch Puzzle =====
+  P(3450, 460, 800, 80, 'solid', '#4a6741');
+  // Three switches that must be hit in order (1, 2, 3)
+  // They're placed so you have to think about the order
+  P(3550, 340, 70, 20, 'solid', '#5a7751');
+  P(3750, 260, 70, 20, 'solid', '#5a7751');
+  P(3950, 340, 70, 20, 'solid', '#5a7751');
+
+  S(3560, 305, 'switch', {id: 0, order: 2, label: '2', groupId: 'doorA'}); // Must be 2nd
+  S(3760, 225, 'switch', {id: 1, order: 1, label: '1', groupId: 'doorA'}); // Must be 1st
+  S(3960, 305, 'switch', {id: 2, order: 3, label: '3', groupId: 'doorA'}); // Must be 3rd
+
+  // Door that opens when switches are hit in right order
+  S(4150, -40, 'switch_door', {groupId: 'doorA', w: 20, h: 500, requiredOrder: [1,0,2]});
+
+  S(3500, 420, 'sign', {message: "Hit the switches in order: 1, 2, 3! Wrong order resets them."});
+
+  // Some saws for extra challenge
+  O(3650, 430, 30, 30, 'saw', 'up');
+  O(3850, 430, 30, 30, 'saw', 'up');
+
+  S(4200, 420, 'checkpoint');
+
+  // ===== SECTION 6: Blue Key + Bounce Pads =====
+  P(4200, 460, 280, 80, 'solid', '#4a6741'); // ground before pads
+  // Bounce pads (no ground underneath so player lands ON them)
+  P(4500, 460, 80, 20, 'bounce', '#d4a040');
+  P(4640, 460, 80, 20, 'bounce', '#d4a040');
+  P(4800, 460, 80, 20, 'bounce', '#d4a040');
+  P(4900, 460, 200, 80, 'solid', '#4a6741'); // ground after pads
+
+  // Blue key high up - need bounce to reach
+  S(4660, 210, 'key', {color: 'blue'});
+  P(4630, 260, 80, 15, 'solid', '#5a7751');
+  // Blue gate
+  S(5000, -40, 'gate', {color: 'blue', w: 20, h: 500});
+
+  S(4250, 420, 'sign', {message: "Yellow pads bounce you! Get the BLUE key up high!"});
+  S(5050, 420, 'checkpoint');
+
+  // ===== SECTION 7: The Maze of Saws =====
+  P(5100, 460, 1000, 80, 'solid', '#4a6741');
+  // Ceiling for enclosed section
+  P(5100, 140, 1000, 20, 'solid', '#41504a');
+  // Walls creating corridors
+  P(5300, 160, 20, 150, 'solid', '#41504a');
+  P(5300, 380, 20, 80, 'solid', '#41504a');
+  P(5500, 160, 20, 80, 'solid', '#41504a');
+  P(5500, 310, 20, 150, 'solid', '#41504a');
+  P(5700, 160, 20, 150, 'solid', '#41504a');
+  P(5700, 380, 20, 80, 'solid', '#41504a');
+  P(5900, 160, 20, 80, 'solid', '#41504a');
+  P(5900, 310, 20, 150, 'solid', '#41504a');
+
+  // Saws in the corridors
+  O(5200, 350, 30, 30, 'saw_moving', 'vertical');
+  O(5400, 200, 30, 30, 'saw_moving', 'vertical');
+  O(5600, 350, 30, 30, 'saw_moving', 'vertical');
+  O(5800, 200, 30, 30, 'saw_moving', 'vertical');
+  O(6000, 350, 30, 30, 'saw_moving', 'vertical');
+
+  S(5150, 420, 'sign', {message: "Navigate through the saw maze! Time your moves!"});
+
+  P(6050, 460, 200, 80, 'solid', '#4a6741');
+  S(6100, 420, 'checkpoint');
+
+  // ===== SECTION 8: Timed Door Puzzle + Final Challenge =====
+  P(6200, 460, 400, 80, 'solid', '#4a6741');
+  // Timed button opens a door ahead - race to get through!
+  S(6300, 430, 'timed_button', {doorId: 'lv1final', duration: 150});
+  S(6500, -40, 'timed_door', {doorId: 'lv1final', w: 20, h: 500, color: '#aaaa44'});
+  S(6250, 420, 'sign', {message: "Hit the button then RACE through the door before time runs out!"});
+
+  P(6550, 460, 1100, 80, 'solid', '#4a6741');
+
+  // Green key above spikes - jump to grab it
+  O(6700, 440, 30, 20, 'spike', 'up');
+  O(6750, 440, 30, 20, 'spike', 'up');
+  O(6800, 440, 30, 20, 'spike', 'up');
+  S(6750, 370, 'key', {color: 'green'});
+
+  // Moving platforms over a pit
+  O(6650, 520, 400, 40, 'pit', 'up');
+  P(6700, 400, 70, 15, 'solid', '#7a6751');
+  P(6850, 350, 70, 15, 'solid', '#7a6751');
+  P(7000, 400, 70, 15, 'solid', '#7a6751');
+
+  // Make some of these platforms move
+  platforms[platforms.length-3].moving = true;
+  platforms[platforms.length-3].moveDir = 'y';
+  platforms[platforms.length-3].moveRange = 40;
+  platforms[platforms.length-3].moveSpeed = 1.5;
+
+  platforms[platforms.length-1].moving = true;
+  platforms[platforms.length-1].moveDir = 'y';
+  platforms[platforms.length-1].moveRange = 40;
+  platforms[platforms.length-1].moveSpeed = 1.2;
+
+  P(7100, 460, 500, 80, 'solid', '#4a6741');
+
+  // Green gate to the finish
+  S(7350, -40, 'gate', {color: 'green', w: 20, h: 500});
+
+  S(6250, 420, 'sign', {message: "Final challenge! Get the green key and reach the finish!"});
+
+  // ===== FINISH =====
+  S(7500, 420, 'finish');
+}
+
+function buildLevel2() {
+  const { P, O, S } = levelHelpers();
+
+  // ===== LEVEL 2: Catapult Canyon =====
+  S(50, 420, 'sign', {message: "Level 2: Catapult Canyon! Step on catapults to launch!"});
+
+  // ===== SECTION 1: Learn the Catapult =====
+  P(0, 460, 400, 80, 'solid', '#5a5040');
+  // First catapult - launches you to a platform
+  S(300, 430, 'catapult', {launchVX: 8, launchVY: -20, angle: -60});
+  // Landing platform
+  P(550, 320, 120, 20, 'solid', '#6a6050');
+  P(700, 320, 200, 20, 'solid', '#6a6050');
+  S(150, 420, 'sign', {message: "Step on the catapult to launch into the air!"});
+  S(750, 280, 'checkpoint');
+
+  // ===== SECTION 2: Catapult Chain =====
+  // Launch from platform to platform using catapults
+  S(850, 290, 'catapult', {launchVX: 6, launchVY: -22, angle: -70});
+  P(1050, 180, 100, 20, 'solid', '#6a6050');
+  S(1070, 150, 'catapult', {launchVX: 10, launchVY: -15, angle: -45});
+  P(1400, 200, 120, 20, 'solid', '#6a6050');
+  // Safe ground below
+  P(900, 460, 300, 80, 'solid', '#5a5040');
+  O(900, 520, 600, 40, 'pit', 'up');
+  P(1350, 460, 200, 80, 'solid', '#5a5040');
+  S(1400, 160, 'checkpoint');
+
+  // ===== SECTION 3: Catapult + Spikes =====
+  P(1500, 460, 300, 80, 'solid', '#5a5040');
+  O(1650, 440, 40, 20, 'spike', 'up');
+  O(1700, 440, 40, 20, 'spike', 'up');
+  S(1580, 430, 'catapult', {launchVX: 12, launchVY: -18, angle: -50});
+  // Must launch over the spikes and land on the far side
+  P(1850, 350, 100, 20, 'solid', '#6a6050');
+  // Another catapult on the platform
+  S(1870, 320, 'catapult', {launchVX: 5, launchVY: -24, angle: -75});
+  // High platform with yellow key
+  P(1950, 140, 100, 20, 'solid', '#6a6050');
+  S(1970, 105, 'key', {color: 'yellow'});
+  // Ground continues
+  P(1850, 460, 400, 80, 'solid', '#5a5040');
+  S(2100, 420, 'checkpoint');
+
+  S(1500, 350, 'jump_orb'); // Jump orb
+
+  // ===== SECTION 4: Target Platforms (precision catapult) =====
+  P(2200, 460, 200, 80, 'solid', '#5a5040');
+  S(2150, 420, 'sign', {message: "Aim carefully! Each catapult sends you a different direction."});
+  // Catapult that launches at a low angle - far horizontal
+  S(2300, 430, 'catapult', {launchVX: 14, launchVY: -12, angle: -35});
+  // Small target platforms over a pit
+  O(2400, 520, 800, 40, 'pit', 'up');
+  P(2550, 400, 60, 15, 'solid', '#6a6050');
+  P(2700, 350, 60, 15, 'solid', '#6a6050');
+  // Catapult on middle platform
+  S(2560, 370, 'catapult', {launchVX: 6, launchVY: -18, angle: -65});
+  P(2850, 250, 80, 15, 'solid', '#6a6050');
+  // Catapult to reach the far side
+  S(2860, 220, 'catapult', {launchVX: 10, launchVY: -14, angle: -50});
+  P(3100, 300, 120, 20, 'solid', '#6a6050');
+  P(3100, 460, 300, 80, 'solid', '#5a5040');
+  S(3150, 260, 'checkpoint');
+
+  // ===== SECTION 5: Yellow Gate + Moving Saws =====
+  P(3350, 460, 600, 80, 'solid', '#5a5040');
+  S(3400, -40, 'gate', {color: 'yellow', w: 20, h: 500});
+  // After the gate - saw dodging
+  O(3500, 380, 30, 30, 'saw_moving', 'vertical');
+  O(3650, 300, 30, 30, 'saw_moving', 'vertical');
+  O(3800, 380, 30, 30, 'saw_moving', 'vertical');
+  S(3450, 420, 'sign', {message: "Dodge the saws! Time your run!"});
+  S(3900, 420, 'checkpoint');
+
+  // ===== SECTION 6: The Big Launch =====
+  P(3950, 460, 300, 80, 'solid', '#5a5040');
+  S(4000, 420, 'sign', {message: "The MEGA catapult! Hold on tight!"});
+  // Mega catapult - huge launch
+  S(4150, 430, 'catapult', {launchVX: 16, launchVY: -26, angle: -55, mega: true});
+  // Platforms way up high and far away
+  O(4250, 520, 800, 40, 'pit', 'up');
+  P(4500, 150, 80, 20, 'solid', '#6a6050');
+  P(4650, 200, 80, 20, 'solid', '#6a6050');
+  P(4800, 250, 80, 20, 'solid', '#6a6050');
+  // Moving platform
+  P(4950, 300, 80, 15, 'solid', '#7a6751');
+  platforms[platforms.length-1].moving = true;
+  platforms[platforms.length-1].moveDir = 'y';
+  platforms[platforms.length-1].moveRange = 50;
+  platforms[platforms.length-1].moveSpeed = 1.2;
+
+  P(5050, 460, 200, 80, 'solid', '#5a5040');
+  S(5100, 420, 'checkpoint');
+
+  // ===== SECTION 7: Catapult Puzzle - Hit Switches by Launching =====
+  P(5200, 460, 800, 80, 'solid', '#5a5040');
+  S(5250, 420, 'sign', {message: "Launch yourself at the switches! Hit 1, 2, 3 in order!"});
+
+  // Switches on high walls - must catapult to reach them
+  P(5450, 250, 20, 210, 'solid', '#555');  // wall 1
+  P(5650, 200, 20, 260, 'solid', '#555');  // wall 2
+  P(5850, 280, 20, 180, 'solid', '#555');  // wall 3
+
+  S(5430, 260, 'switch', {id: 0, order: 1, label: '1', groupId: 'doorB'});
+  S(5630, 210, 'switch', {id: 1, order: 2, label: '2', groupId: 'doorB'});
+  S(5830, 290, 'switch', {id: 2, order: 3, label: '3', groupId: 'doorB'});
+
+  // Catapults aimed at each switch
+  S(5350, 430, 'catapult', {launchVX: 2, launchVY: -22, angle: -80});
+  S(5550, 430, 'catapult', {launchVX: 2, launchVY: -25, angle: -80});
+  S(5750, 430, 'catapult', {launchVX: 2, launchVY: -20, angle: -80});
+
+  S(5950, -40, 'switch_door', {groupId: 'doorB', w: 20, h: 500, requiredOrder: [0, 1, 2]});
+  S(5970, 420, 'checkpoint');
+
+  // ===== SECTION 8: Final Gauntlet =====
+  P(6000, 460, 300, 80, 'solid', '#5a5040');
+  S(6050, 420, 'sign', {message: "Final stretch! Launch, dodge, and reach home!"});
+
+  // Spike floor section - must catapult over
+  O(6300, 440, 400, 20, 'spike', 'up');
+  P(6300, 460, 400, 80, 'solid', '#5a5040');
+  S(6200, 430, 'catapult', {launchVX: 14, launchVY: -16, angle: -45, far: true});
+  // Landing pad on the other side
+  P(6700, 460, 200, 80, 'solid', '#5a5040');
+
+  // One last catapult to home
+  S(6750, 430, 'catapult', {launchVX: 10, launchVY: -20, angle: -60});
+  P(7000, 300, 120, 20, 'solid', '#6a6050');
+  P(7000, 460, 300, 80, 'solid', '#5a5040');
+
+  // ===== FINISH =====
+  S(7050, 260, 'finish');
+}
+
+function buildLevel3() {
+  const { P, O, S } = levelHelpers();
+
+  // ===== LEVEL 3: Windy Heights =====
+  S(50, 420, 'sign', {message: "Level 3: Windy Heights! Press UP near hook points to grapple!"});
+
+  // ===== SECTION 1: Learn the Grapple =====
+  P(0, 460, 400, 80, 'solid', '#4a5060');
+  // Gap with a hook point above
+  S(500, 200, 'hook_point');
+  P(650, 380, 150, 20, 'solid', '#5a6070');
+  O(400, 520, 300, 40, 'pit', 'up');
+  S(200, 420, 'sign', {message: "Jump + UP to grab hooks! LEFT/RIGHT to swing! UP climbs, SPACE lets go!"});
+  S(700, 340, 'checkpoint');
+
+  // ===== SECTION 2: Learn Wind Tunnels =====
+  P(750, 460, 300, 80, 'solid', '#4a5060');
+  // Upward wind tunnel (extends to ground so player can walk in)
+  S(900, 370, 'wind', {dirX: 0, dirY: -3, w: 80, h: 220});
+  P(1100, 280, 120, 20, 'solid', '#5a6070');
+  S(800, 420, 'sign', {message: "Wind tunnels push you! Ride them up!"});
+  S(1150, 240, 'checkpoint');
+
+  // ===== SECTION 3: Grapple Chain =====
+  P(1200, 460, 150, 80, 'solid', '#4a5060');
+  O(1350, 520, 600, 40, 'pit', 'up');
+  S(1450, 180, 'hook_point');
+  S(1650, 220, 'hook_point');
+  S(1850, 160, 'hook_point');
+  P(1950, 380, 150, 20, 'solid', '#5a6070');
+  P(1950, 460, 150, 80, 'solid', '#4a5060');
+  S(1250, 420, 'sign', {message: "Chain grapples together! Swing and release to fly!"});
+  S(2000, 340, 'checkpoint');
+
+  S(1700, 300, 'jump_orb'); // Jump orb
+
+  // ===== SECTION 4: Wind Maze =====
+  P(2050, 460, 200, 80, 'solid', '#4a5060');
+  // Sideways wind pushing left - fight through it
+  S(2300, 380, 'wind', {dirX: -2.5, dirY: 0, w: 200, h: 200});
+  P(2250, 460, 300, 80, 'solid', '#4a5060');
+  O(2350, 440, 40, 20, 'spike', 'up');
+  O(2420, 440, 40, 20, 'spike', 'up');
+  // Upward wind at the end to lift over a wall
+  P(2550, 300, 20, 160, 'solid', '#4a5060'); // wall
+  S(2520, 200, 'wind', {dirX: 0, dirY: -4, w: 50, h: 200});
+  P(2550, 460, 200, 80, 'solid', '#4a5060');
+  S(2650, 420, 'checkpoint');
+
+  // ===== SECTION 5: Grapple + Wind Combo =====
+  P(2700, 460, 200, 80, 'solid', '#4a5060');
+  O(2900, 520, 500, 40, 'pit', 'up');
+  // Wind blowing right to help you reach the hook
+  S(2850, 350, 'wind', {dirX: 3, dirY: -1, w: 120, h: 250});
+  S(3050, 180, 'hook_point');
+  // Swing from hook to a platform with wind boost
+  S(3200, 250, 'wind', {dirX: 0, dirY: -3.5, w: 80, h: 200});
+  P(3300, 200, 120, 20, 'solid', '#5a6070');
+  S(3250, 160, 'key', {color: 'purple'});
+  // Drop down to continue
+  P(3350, 460, 200, 80, 'solid', '#4a5060');
+  S(3400, 420, 'checkpoint');
+
+  // ===== SECTION 6: Wind Tunnels + Spikes Gauntlet =====
+  P(3500, 460, 600, 80, 'solid', '#4a5060');
+  // Alternating wind pushes with spikes
+  S(3600, 390, 'wind', {dirX: 0, dirY: -2.5, w: 60, h: 180});
+  O(3680, 440, 30, 20, 'spike', 'up');
+  S(3720, 390, 'wind', {dirX: 0, dirY: -2.5, w: 60, h: 180});
+  O(3800, 440, 30, 20, 'spike', 'up');
+  S(3840, 390, 'wind', {dirX: 0, dirY: -2.5, w: 60, h: 180});
+  O(3920, 440, 30, 20, 'spike', 'up');
+  S(3960, 390, 'wind', {dirX: 0, dirY: -2.5, w: 60, h: 180});
+  S(4050, 420, 'checkpoint');
+
+  // ===== SECTION 7: Vertical Climb =====
+  P(4100, 460, 200, 80, 'solid', '#4a5060');
+  S(4150, 420, 'sign', {message: "Grapple your way up! The sky is the limit!"});
+  // Vertical climb using hooks
+  P(4100, 460, 100, 80, 'solid', '#4a5060');
+  S(4200, 350, 'hook_point');
+  P(4300, 300, 80, 15, 'solid', '#5a6070');
+  S(4250, 200, 'hook_point');
+  P(4150, 150, 80, 15, 'solid', '#5a6070');
+  S(4300, 60, 'hook_point');
+  P(4400, 100, 120, 15, 'solid', '#5a6070');
+  // Strong wind up to help at the top
+  S(4380, -50, 'wind', {dirX: 0, dirY: -3, w: 80, h: 150});
+  P(4500, 50, 120, 15, 'solid', '#5a6070');
+  // Drop back down with platforms
+  P(4650, 150, 100, 15, 'solid', '#5a6070');
+  P(4750, 280, 100, 15, 'solid', '#5a6070');
+  P(4850, 400, 100, 15, 'solid', '#5a6070');
+  P(4850, 460, 200, 80, 'solid', '#4a5060');
+  S(4900, 360, 'checkpoint');
+
+  // ===== SECTION 8: Final - Gate + Grapple Over Saws =====
+  P(5000, 460, 200, 80, 'solid', '#4a5060');
+  S(5100, -40, 'gate', {color: 'purple', w: 20, h: 500});
+  P(5150, 460, 600, 80, 'solid', '#4a5060');
+  // Saws on the ground
+  O(5250, 430, 30, 30, 'saw', 'up');
+  O(5400, 430, 30, 30, 'saw', 'up');
+  O(5550, 430, 30, 30, 'saw', 'up');
+  // Hooks above the saws
+  S(5300, 250, 'hook_point');
+  S(5500, 200, 'hook_point');
+  S(5650, 250, 'hook_point');
+  // Final wind boost to the finish
+  S(5700, 350, 'wind', {dirX: 3, dirY: -2, w: 100, h: 220});
+  P(5750, 460, 200, 80, 'solid', '#4a5060');
+
+  // ===== FINISH =====
+  S(5850, 420, 'finish');
+}
+
+function buildLevel4() {
+  const { P, O, S } = levelHelpers();
+  // Helper for ice platforms
+  const ICE = (x, y, w, h) => P(x, y, w, h, 'ice', '#88ccee');
+
+  // ===== LEVEL 4: Frozen Slide =====
+  S(50, 420, 'sign', {message: "Level 4: Frozen Slide! Ice makes you slide - no brakes!"});
+
+  // ===== SECTION 1: Learn Ice =====
+  P(0, 460, 200, 80, 'solid', '#4a5060');
+  ICE(200, 460, 500, 80);
+  O(550, 440, 40, 20, 'spike', 'up');
+  // Gap after spikes to jump
+  P(700, 460, 150, 80, 'solid', '#4a5060');
+  S(150, 420, 'sign', {message: "You slide on ice! Jump over the spikes!"});
+  S(750, 420, 'checkpoint');
+
+  // ===== SECTION 2: Ice Slopes =====
+  // Downhill ice slide into a jump
+  ICE(850, 460, 300, 80);
+  ICE(1150, 430, 200, 30);  // raised ice
+  ICE(1350, 400, 200, 20);  // higher
+  // Gap - need speed from the ice to clear it
+  O(1550, 520, 200, 40, 'pit', 'up');
+  P(1750, 460, 200, 80, 'solid', '#4a5060');
+  S(900, 420, 'sign', {message: "Build up speed on the ice to jump the gap!"});
+  S(1800, 420, 'checkpoint');
+
+  // ===== SECTION 3: Ice + Spikes Obstacle Course =====
+  ICE(1900, 460, 800, 80);
+  O(2050, 440, 30, 20, 'spike', 'up');
+  O(2200, 440, 30, 20, 'spike', 'up');
+  O(2350, 440, 30, 20, 'spike', 'up');
+  O(2500, 440, 30, 20, 'spike', 'up');
+  // Collect cyan key while sliding
+  P(2250, 360, 80, 15, 'solid', '#5a6070');
+  S(2270, 325, 'key', {color: 'cyan'});
+  S(2650, 420, 'checkpoint');
+
+  S(2400, 350, 'jump_orb'); // Jump orb
+
+  // ===== SECTION 4: Ice Platforms Over Pits =====
+  P(2700, 460, 150, 80, 'solid', '#4a5060');
+  O(2850, 520, 600, 40, 'pit', 'up');
+  ICE(2900, 420, 100, 15);
+  ICE(3050, 380, 100, 15);
+  ICE(3200, 340, 100, 15);
+  ICE(3350, 380, 100, 15);
+  P(3450, 460, 150, 80, 'solid', '#4a5060');
+  S(2750, 420, 'sign', {message: "Careful! You slide on ice platforms too!"});
+  S(3500, 420, 'checkpoint');
+
+  // ===== SECTION 5: Ice + Magnet Zone =====
+  // Magnet pulls you right while on ice - fight against it to avoid spikes!
+  ICE(3600, 460, 400, 80);
+  S(3700, 380, 'magnet', {w: 300, h: 150, pullDir: 'right', strength: 0.5});
+  O(3900, 440, 40, 20, 'spike', 'up');
+  P(4000, 460, 200, 80, 'solid', '#4a5060');
+  S(3650, 420, 'sign', {message: "The magnet pulls you! Fight against it on the ice!"});
+  S(4100, 420, 'checkpoint');
+
+  // ===== SECTION 5b: One-Way Wall Puzzle =====
+  // Can only go right through the blue wall, must find another way back for the key
+  P(4150, 460, 500, 80, 'solid', '#4a5060');
+  S(4300, 380, 'oneway', {w: 20, h: 80, passDir: 'right'});
+  P(4350, 350, 80, 15, 'solid', '#5a6070');
+  S(4200, 420, 'sign', {message: "One-way wall! You can go right but not back left!"});
+  S(4550, 420, 'checkpoint');
+
+  // ===== SECTION 6: Ice + Bounce Combo =====
+  ICE(4400, 460, 300, 80);
+  // Bounce pad at the end of ice slide - speed + bounce = mega jump
+  P(4700, 460, 60, 20, 'bounce', '#d4a040');
+  O(4760, 520, 400, 40, 'pit', 'up');
+  // High platform to reach with ice speed + bounce
+  P(4950, 250, 120, 20, 'solid', '#5a6070');
+  P(5050, 460, 200, 80, 'solid', '#4a5060');
+  S(4450, 420, 'sign', {message: "Slide fast on ice then hit the bounce pad!"});
+  S(5100, 420, 'checkpoint');
+
+  // ===== SECTION 7: Ice Maze with Walls =====
+  ICE(5150, 460, 800, 80);
+  // Walls you need to stop before (jump over them)
+  P(5350, 380, 20, 80, 'solid', '#4a5060');
+  P(5550, 350, 20, 110, 'solid', '#4a5060');
+  P(5700, 380, 20, 80, 'solid', '#4a5060');
+  // Spikes behind the walls if you go too fast
+  O(5370, 440, 30, 20, 'spike', 'up');
+  O(5570, 440, 30, 20, 'spike', 'up');
+  O(5720, 440, 30, 20, 'spike', 'up');
+  S(5200, 420, 'sign', {message: "Jump over the walls! Careful - spikes behind them!"});
+  S(5900, 420, 'checkpoint');
+
+  // ===== SECTION 8: Final - Gate + Long Ice Slide =====
+  P(5950, 460, 200, 80, 'solid', '#4a5060');
+  S(6050, -40, 'gate', {color: 'cyan', w: 20, h: 500});
+  // Epic long ice slide to the finish
+  ICE(6100, 460, 400, 80);
+  ICE(6500, 430, 300, 20); // uphill ramp
+  ICE(6800, 400, 200, 20); // higher
+  // Spikes to jump over on the slide
+  O(6300, 440, 40, 20, 'spike', 'up');
+  O(6600, 410, 40, 20, 'spike', 'up');
+  O(6850, 380, 40, 20, 'spike', 'up');
+  // Final jump to home
+  P(7050, 460, 200, 80, 'solid', '#4a5060');
+  S(7100, 420, 'finish');
+}
+
+// ============ LEVEL 5: Laser Lab ============
+function buildLevel5() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 5: Laser Lab! Dodge lasers, ride conveyor belts!"});
+
+  // SECTION 1: Conveyor belts intro
+  P(0, 460, 200, 80, 'solid', '#505060');
+  P(200, 460, 300, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2;
+  P(500, 460, 200, 80, 'solid', '#505060');
+  S(100, 420, 'sign', {message: "Conveyor belts push you! Go with or against the flow!"});
+  S(600, 420, 'checkpoint');
+
+  // SECTION 2: Lasers intro
+  P(650, 460, 600, 80, 'solid', '#505060');
+  S(700, 420, 'sign', {message: "Red lasers turn on and off. Time your run!"});
+  S(850, 300, 'laser_emitter', {dir: 'down', period: 180, onTime: 70});
+  S(1000, 300, 'laser_emitter', {dir: 'down', period: 180, onTime: 70, offset: 90});
+  S(1100, 420, 'checkpoint');
+
+  // SECTION 3: Belts + spikes
+  P(1150, 460, 200, 80, 'solid', '#505060');
+  P(1350, 460, 400, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  O(1550, 440, 40, 20, 'spike', 'up');
+  O(1650, 440, 40, 20, 'spike', 'up');
+  P(1750, 460, 200, 80, 'solid', '#505060');
+  S(1200, 420, 'sign', {message: "The belt pushes you toward spikes! Jump over them!"});
+  S(1800, 420, 'checkpoint');
+
+  // SECTION 4: Laser grid
+  P(1850, 460, 800, 80, 'solid', '#505060');
+  S(1950, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60});
+  S(2100, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60, offset: 53});
+  S(2250, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60, offset: 106});
+  S(2400, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60});
+  // Orange key on a platform above lasers
+  P(2200, 300, 80, 15, 'solid', '#606070');
+  S(2220, 265, 'key', {color: 'orange'});
+  S(2550, 420, 'checkpoint');
+
+  // SECTION 5: Reverse conveyor puzzle
+  P(2600, 460, 150, 80, 'solid', '#505060');
+  P(2750, 460, 200, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = -1; platforms[platforms.length-1].beltSpeed = 3;
+  O(2700, 520, 250, 40, 'pit', 'up');
+  P(2950, 460, 200, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  P(3150, 460, 150, 80, 'solid', '#505060');
+  S(2650, 420, 'sign', {message: "Belts go both ways! Fight the current!"});
+  S(3200, 420, 'checkpoint');
+  S(3100, 380, 'jump_orb');
+
+  // SECTION 5b: Timed door - hit button, race across conveyor to get through
+  P(3200, 460, 400, 80, 'solid', '#505060');
+  S(3250, 430, 'timed_button', {doorId: 'lv5race', duration: 120});
+  P(3600, 460, 200, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = -1; platforms[platforms.length-1].beltSpeed = 2;
+  S(3750, -40, 'timed_door', {doorId: 'lv5race', w: 20, h: 500, color: '#aaaa44'});
+  P(3600, 480, 200, 60, 'solid', '#505060');
+  S(3300, 420, 'sign', {message: "Hit the button then race! The belt fights you!"});
+  P(3800, 460, 200, 80, 'solid', '#505060');
+  S(3850, 420, 'checkpoint');
+
+  // SECTION 6: Moving saws + magnet
+  P(3900, 460, 700, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2;
+  P(3900, 480, 700, 60, 'solid', '#505060');
+  S(4100, 350, 'magnet', {w: 150, h: 150, pullDir: 'down', strength: 0.3});
+  O(3400, 380, 30, 30, 'saw_moving', 'vertical');
+  O(3600, 350, 30, 30, 'saw_moving', 'vertical');
+  O(3800, 380, 30, 30, 'saw_moving', 'vertical');
+  S(3900, 420, 'checkpoint');
+
+  // SECTION 7: Laser + conveyor gauntlet
+  P(3950, 460, 800, 80, 'solid', '#505060');
+  P(3950, 460, 800, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2.5;
+  S(4050, 200, 'laser_emitter', {dir: 'down', period: 150, onTime: 55});
+  S(4200, 200, 'laser_emitter', {dir: 'down', period: 150, onTime: 55, offset: 50});
+  S(4350, 200, 'laser_emitter', {dir: 'down', period: 150, onTime: 55, offset: 100});
+  S(4500, 200, 'laser_emitter', {dir: 'down', period: 150, onTime: 55});
+  O(4600, 440, 40, 20, 'spike', 'up');
+  S(4650, 420, 'checkpoint');
+
+  // SECTION 8: Gate + final
+  P(4700, 460, 200, 80, 'solid', '#505060');
+  S(4800, -40, 'gate', {color: 'orange', w: 20, h: 500});
+  P(4850, 460, 400, 80, 'solid', '#505060');
+  S(4900, 200, 'laser_emitter', {dir: 'down', period: 140, onTime: 50});
+  S(5050, 200, 'laser_emitter', {dir: 'down', period: 140, onTime: 50, offset: 70});
+  P(5200, 460, 200, 80, 'solid', '#505060');
+  S(5300, 420, 'finish');
+}
+
+// ============ LEVEL 6: Shadow Caves ============
+function buildLevel6() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 6: Shadow Caves! It's dark... portals warp you around!"});
+
+  // Enable darkness for this level
+  S(0, 0, 'darkness_mode');
+
+  // SECTION 1: Learn darkness
+  P(0, 460, 500, 80, 'solid', '#3a3040');
+  O(350, 440, 40, 20, 'spike', 'up');
+  S(100, 420, 'sign', {message: "You can only see around Bagel Cat! Watch for glowing spikes!"});
+  S(450, 420, 'checkpoint');
+
+  // SECTION 2: Portal intro
+  P(500, 460, 300, 80, 'solid', '#3a3040');
+  S(700, 410, 'portal', {color: '#ff6600', pairId: 'A', label: 'A'});
+  P(1200, 460, 300, 80, 'solid', '#3a3040');
+  S(1250, 410, 'portal', {color: '#ff6600', pairId: 'A', label: 'A'});
+  O(800, 520, 400, 40, 'pit', 'up');
+  S(550, 420, 'sign', {message: "Orange portals teleport you! Walk into one to warp!"});
+  S(1350, 420, 'checkpoint');
+
+  // SECTION 3: Dark platforming
+  P(1400, 460, 150, 80, 'solid', '#3a3040');
+  P(1600, 400, 100, 15, 'solid', '#3a3040');
+  P(1750, 340, 100, 15, 'solid', '#3a3040');
+  P(1900, 400, 100, 15, 'solid', '#3a3040');
+  O(1550, 520, 500, 40, 'pit', 'up');
+  S(1700, 305, 'jump_orb');
+  P(2050, 460, 200, 80, 'solid', '#3a3040');
+  S(2100, 420, 'checkpoint');
+
+  // SECTION 4: Portal maze
+  P(2150, 460, 200, 80, 'solid', '#3a3040');
+  S(2250, 410, 'portal', {color: '#0066ff', pairId: 'B', label: 'B'});
+  P(2700, 300, 200, 80, 'solid', '#3a3040');
+  S(2750, 250, 'portal', {color: '#0066ff', pairId: 'B', label: 'B'});
+  // From the high platform, jump to get key
+  P(2950, 200, 100, 15, 'solid', '#3a3040');
+  S(2970, 165, 'key', {color: 'pink'});
+  P(2950, 460, 200, 80, 'solid', '#3a3040');
+  S(3050, 420, 'checkpoint');
+
+  // SECTION 5: Spikes in the dark
+  P(3100, 460, 600, 80, 'solid', '#3a3040');
+  O(3200, 440, 30, 20, 'spike', 'up');
+  O(3300, 440, 30, 20, 'spike', 'up');
+  O(3400, 440, 30, 20, 'spike', 'up');
+  O(3500, 440, 30, 20, 'spike', 'up');
+  O(3600, 440, 30, 20, 'spike', 'up');
+  S(3650, 420, 'checkpoint');
+
+  // SECTION 6: Portal chain
+  P(3700, 460, 200, 80, 'solid', '#3a3040');
+  S(3800, 410, 'portal', {color: '#00cc66', pairId: 'C', label: 'C'});
+  P(4200, 250, 200, 80, 'solid', '#3a3040');
+  S(4250, 200, 'portal', {color: '#00cc66', pairId: 'C', label: 'C'});
+  S(4350, 200, 'portal', {color: '#cc00cc', pairId: 'D', label: 'D'});
+  P(4600, 460, 200, 80, 'solid', '#3a3040');
+  S(4650, 410, 'portal', {color: '#cc00cc', pairId: 'D', label: 'D'});
+  O(3900, 520, 300, 40, 'pit', 'up');
+  O(4400, 520, 200, 40, 'pit', 'up');
+  S(4700, 420, 'checkpoint');
+
+  // SECTION 7: Dark saw maze
+  P(4750, 460, 600, 80, 'solid', '#3a3040');
+  P(4750, 250, 600, 20, 'solid', '#3a3040');
+  O(4900, 350, 30, 30, 'saw_moving', 'vertical');
+  O(5050, 300, 30, 30, 'saw_moving', 'vertical');
+  O(5200, 350, 30, 30, 'saw_moving', 'vertical');
+  S(5300, 420, 'checkpoint');
+
+  // SECTION 8: Gate + final
+  P(5350, 460, 200, 80, 'solid', '#3a3040');
+  S(5450, -40, 'gate', {color: 'pink', w: 20, h: 500});
+  P(5500, 460, 300, 80, 'solid', '#3a3040');
+  O(5600, 440, 40, 20, 'spike', 'up');
+  O(5700, 440, 40, 20, 'spike', 'up');
+  P(5750, 460, 200, 80, 'solid', '#3a3040');
+  S(5850, 420, 'finish');
+}
+
+// ============ LEVEL 7: Sky Fortress ============
+function buildLevel7() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 7: Sky Fortress! The final challenge - everything combined!"});
+
+  // SECTION 1: Moving platforms over void
+  P(0, 460, 200, 80, 'solid', '#605050');
+  O(200, 520, 400, 40, 'pit', 'up');
+  P(250, 380, 80, 15, 'solid', '#706060');
+  platforms[platforms.length-1].moving = true; platforms[platforms.length-1].moveDir = 'x'; platforms[platforms.length-1].moveRange = 60; platforms[platforms.length-1].moveSpeed = 1;
+  P(450, 320, 80, 15, 'solid', '#706060');
+  platforms[platforms.length-1].moving = true; platforms[platforms.length-1].moveDir = 'y'; platforms[platforms.length-1].moveRange = 40; platforms[platforms.length-1].moveSpeed = 1.2;
+  P(600, 460, 200, 80, 'solid', '#605050');
+  S(100, 420, 'sign', {message: "Moving platforms! Time your jumps!"});
+  S(700, 420, 'checkpoint');
+
+  // SECTION 2: Gravity flip + spikes
+  P(750, 460, 600, 80, 'solid', '#605050');
+  P(750, 100, 600, 20, 'solid', '#504545');
+  S(800, 425, 'gravity_flip');
+  O(900, 440, 40, 20, 'spike', 'up');
+  O(900, 120, 40, 20, 'spike', 'down');
+  S(1000, 425, 'gravity_flip');
+  S(1000, 135, 'gravity_flip');
+  O(1100, 440, 40, 20, 'spike', 'up');
+  O(1100, 120, 40, 20, 'spike', 'down');
+  S(1200, 425, 'gravity_normal');
+  S(1300, 420, 'checkpoint');
+
+  // SECTION 3: Ice + bounce combo
+  P(1350, 460, 100, 80, 'solid', '#605050');
+  P(1450, 460, 300, 80, 'ice', '#88ccee');
+  P(1750, 460, 60, 20, 'bounce', '#d4a040');
+  P(1900, 300, 100, 15, 'solid', '#706060');
+  S(1920, 265, 'key', {color: 'red'});
+  O(1810, 520, 200, 40, 'pit', 'up');
+  P(2000, 460, 200, 80, 'solid', '#605050');
+  S(2050, 420, 'checkpoint');
+
+  // SECTION 4: Laser + conveyor belt
+  P(2100, 460, 700, 80, 'solid', '#605050');
+  P(2100, 460, 700, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2;
+  S(2250, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60});
+  S(2450, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60, offset: 53});
+  S(2650, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60});
+  S(2750, 420, 'checkpoint');
+  S(2700, -40, 'gate', {color: 'red', w: 20, h: 500});
+
+  // SECTION 5: Grapple + wind
+  P(2800, 460, 200, 80, 'solid', '#605050');
+  O(3000, 520, 500, 40, 'pit', 'up');
+  S(3100, 200, 'hook_point');
+  S(3300, 180, 'hook_point');
+  S(3350, 300, 'wind', {dirX: 0, dirY: -3, w: 80, h: 220});
+  P(3450, 250, 100, 15, 'solid', '#706060');
+  S(3470, 215, 'key', {color: 'blue'});
+  P(3500, 460, 200, 80, 'solid', '#605050');
+  S(3600, 420, 'checkpoint');
+
+  // SECTION 6: Fake platforms + catapult
+  P(3650, 460, 200, 80, 'solid', '#605050');
+  P(3900, 400, 80, 20, 'fake', '#6a5741');
+  P(4000, 400, 80, 20, 'solid', '#6a6050');
+  P(4100, 400, 80, 20, 'fake', '#6a5741');
+  P(4200, 400, 80, 20, 'solid', '#6a6050');
+  O(3850, 520, 500, 40, 'pit', 'up');
+  S(4250, 370, 'catapult', {launchVX: 12, launchVY: -18, angle: -55, far: true});
+  P(4550, 300, 120, 15, 'solid', '#706060');
+  P(4550, 460, 200, 80, 'solid', '#605050');
+  S(4600, 420, 'checkpoint');
+
+  // SECTION 7: Portal + switch puzzle
+  P(4650, 460, 200, 80, 'solid', '#605050');
+  S(4750, 410, 'portal', {color: '#ff6600', pairId: 'E', label: 'E'});
+  P(5200, 250, 200, 80, 'solid', '#605050');
+  S(5250, 200, 'portal', {color: '#ff6600', pairId: 'E', label: 'E'});
+  // Switches on the high platform
+  P(5100, 200, 60, 15, 'solid', '#706060');
+  S(5110, 170, 'switch', {id: 0, order: 1, label: '1', groupId: 'doorFinal'});
+  P(5300, 150, 60, 15, 'solid', '#706060');
+  S(5310, 120, 'switch', {id: 1, order: 2, label: '2', groupId: 'doorFinal'});
+  P(5450, 200, 60, 15, 'solid', '#706060');
+  S(5460, 170, 'switch', {id: 2, order: 3, label: '3', groupId: 'doorFinal'});
+  P(5500, 460, 200, 80, 'solid', '#605050');
+  S(5600, -40, 'switch_door', {groupId: 'doorFinal', w: 20, h: 500, requiredOrder: [0, 1, 2]});
+  S(5650, 420, 'checkpoint');
+  S(5550, 350, 'key', {color: 'green'});
+
+  // SECTION 8: Final gauntlet - everything!
+  P(5700, 460, 300, 80, 'solid', '#605050');
+  S(5800, -40, 'gate', {color: 'blue', w: 20, h: 500});
+  S(5900, -40, 'gate', {color: 'green', w: 20, h: 500});
+  P(5950, 460, 200, 80, 'ice', '#88ccee');
+  O(6050, 440, 40, 20, 'spike', 'up');
+  P(6150, 460, 200, 80, 'solid', '#605050');
+  S(6200, 200, 'laser_emitter', {dir: 'down', period: 140, onTime: 50});
+  S(6300, 350, 'wind', {dirX: 0, dirY: -3, w: 80, h: 200});
+  P(6350, 200, 100, 15, 'solid', '#706060');
+  S(6400, 160, 'jump_orb');
+  P(6500, 460, 200, 80, 'solid', '#605050');
+  S(6600, 420, 'finish');
+}
+
+// ============ LEVEL 8: Crumble Run ============
+// New mechanic: LOTS of fake platforms, timed spike walls, crush blocks
+function buildLevel8() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 8: Crumble Run! Platforms crumble - keep moving!"});
+
+  // SECTION 1: Fake platform chain - keep running!
+  P(0, 460, 200, 80, 'solid', '#6a5545');
+  P(200, 460, 100, 20, 'fake', '#6a5741');
+  P(320, 460, 100, 20, 'fake', '#6a5741');
+  P(440, 460, 100, 20, 'fake', '#6a5741');
+  P(560, 460, 100, 20, 'fake', '#6a5741');
+  P(680, 460, 100, 20, 'fake', '#6a5741');
+  P(800, 460, 200, 80, 'solid', '#6a5545');
+  O(200, 520, 600, 40, 'pit', 'up');
+  S(850, 420, 'checkpoint');
+
+  // SECTION 2: Crumble + jump up
+  P(900, 460, 150, 80, 'solid', '#6a5545');
+  P(1100, 400, 80, 20, 'fake', '#6a5741');
+  P(1200, 340, 80, 20, 'fake', '#6a5741');
+  P(1300, 280, 80, 20, 'solid', '#6a6050');
+  S(1320, 245, 'key', {color: 'red'});
+  P(1400, 340, 80, 20, 'fake', '#6a5741');
+  P(1500, 400, 80, 20, 'fake', '#6a5741');
+  P(1600, 460, 200, 80, 'solid', '#6a5545');
+  O(1050, 520, 550, 40, 'pit', 'up');
+  S(1650, 420, 'checkpoint');
+
+  // SECTION 3: Spike walls you must pass through gaps
+  P(1700, 460, 800, 80, 'solid', '#6a5545');
+  // Spike walls with big gaps (150px gaps so bagel cat easily fits)
+  O(1850, 220, 20, 80, 'spike', 'up');   // top
+  O(1850, 450, 20, 10, 'spike', 'up');   // bottom - gap 300-450 = 150px
+  O(2050, 220, 20, 60, 'spike', 'up');   // top
+  O(2050, 440, 20, 20, 'spike', 'up');   // bottom - gap 280-440 = 160px
+  O(2250, 200, 20, 90, 'spike', 'up');   // top
+  O(2250, 450, 20, 10, 'spike', 'up');   // bottom - gap 290-450 = 160px
+  S(2400, 420, 'checkpoint');
+  S(2350, 350, 'jump_orb');
+
+  // SECTION 4: Moving saw corridor
+  P(2450, 460, 700, 80, 'solid', '#6a5545');
+  P(2450, 200, 700, 20, 'solid', '#5a4535');
+  O(2550, 300, 35, 35, 'saw_moving', 'vertical');
+  O(2700, 350, 35, 35, 'saw_moving', 'vertical');
+  O(2850, 280, 35, 35, 'saw_moving', 'vertical');
+  O(3000, 320, 35, 35, 'saw_moving', 'vertical');
+  S(3050, 420, 'checkpoint');
+
+  // SECTION 5: Crumble bridge over saws
+  P(3100, 460, 150, 80, 'solid', '#6a5545');
+  O(3250, 520, 500, 40, 'pit', 'up');
+  P(3300, 380, 60, 15, 'fake', '#6a5741');
+  O(3380, 420, 25, 25, 'saw', 'up');
+  P(3430, 350, 60, 15, 'fake', '#6a5741');
+  O(3510, 390, 25, 25, 'saw', 'up');
+  P(3560, 380, 60, 15, 'fake', '#6a5741');
+  O(3640, 420, 25, 25, 'saw', 'up');
+  P(3690, 350, 60, 15, 'fake', '#6a5741');
+  P(3800, 460, 200, 80, 'solid', '#6a5545');
+  S(3850, 420, 'checkpoint');
+
+  // SECTION 6: Bounce + fake combo
+  P(3900, 460, 150, 80, 'solid', '#6a5545');
+  P(4050, 460, 60, 20, 'bounce', '#d4a040');
+  P(4200, 300, 80, 15, 'fake', '#6a5741');
+  P(4300, 250, 80, 15, 'solid', '#6a6050');
+  P(4400, 300, 80, 15, 'fake', '#6a5741');
+  P(4500, 350, 80, 15, 'solid', '#6a6050');
+  P(4600, 460, 200, 80, 'solid', '#6a5545');
+  O(4100, 520, 500, 40, 'pit', 'up');
+  S(4650, 420, 'checkpoint');
+
+  // SECTION 7: Speed run crumble
+  P(4700, 460, 100, 80, 'solid', '#6a5545');
+  P(4800, 440, 80, 20, 'fake', '#6a5741');
+  P(4880, 420, 80, 20, 'fake', '#6a5741');
+  P(4960, 400, 80, 20, 'fake', '#6a5741');
+  P(5040, 380, 80, 20, 'fake', '#6a5741');
+  P(5120, 360, 80, 20, 'fake', '#6a5741');
+  P(5200, 340, 80, 20, 'solid', '#6a6050');
+  O(4800, 520, 400, 40, 'pit', 'up');
+  S(5200, 300, 'checkpoint');
+
+  // SECTION 8: Gate + final
+  P(5250, 460, 200, 80, 'solid', '#6a5545');
+  S(5350, -40, 'gate', {color: 'red', w: 20, h: 500});
+  P(5400, 460, 400, 80, 'solid', '#6a5545');
+  P(5500, 420, 80, 20, 'fake', '#6a5741');
+  P(5600, 380, 80, 20, 'fake', '#6a5741');
+  P(5700, 420, 80, 20, 'fake', '#6a5741');
+  O(5550, 440, 30, 20, 'spike', 'up');
+  O(5650, 440, 30, 20, 'spike', 'up');
+  P(5800, 460, 200, 80, 'solid', '#6a5545');
+  S(5900, 420, 'finish');
+}
+
+// ============ LEVEL 9: Mirror Maze ============
+// New mechanic: Reverse zones flip left/right controls
+function buildLevel9() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 9: Mirror Maze! Pink zones reverse your controls!"});
+
+  // SECTION 1: Learn reverse zone
+  P(0, 460, 300, 80, 'solid', '#505565');
+  S(250, 350, 'reverse_zone', {w: 200, h: 150});
+  P(300, 460, 300, 80, 'solid', '#505565');
+  O(450, 440, 40, 20, 'spike', 'up');
+  P(600, 460, 200, 80, 'solid', '#505565');
+  S(100, 420, 'sign', {message: "In pink zones, LEFT goes RIGHT and RIGHT goes LEFT!"});
+  S(700, 420, 'checkpoint');
+
+  // SECTION 2: Reverse zone platforming (wider platforms, smaller zone)
+  P(750, 460, 150, 80, 'solid', '#505565');
+  S(950, 320, 'reverse_zone', {w: 200, h: 200});
+  P(880, 400, 120, 15, 'solid', '#605575');
+  P(1050, 340, 120, 15, 'solid', '#605575');
+  P(1200, 400, 120, 15, 'solid', '#605575');
+  O(850, 520, 400, 40, 'pit', 'up');
+  P(1300, 460, 200, 80, 'solid', '#505565');
+  S(1350, 420, 'checkpoint');
+
+  // SECTION 3: Reverse + spikes (spikes OUTSIDE the zone)
+  P(1400, 460, 700, 80, 'solid', '#505565');
+  S(1500, 380, 'reverse_zone', {w: 120, h: 120});
+  O(1700, 440, 30, 20, 'spike', 'up');
+  O(1900, 440, 30, 20, 'spike', 'up');
+  S(2020, 420, 'checkpoint');
+  S(1850, 350, 'jump_orb');
+
+  // SECTION 4: Key behind reverse zone puzzle
+  P(1950, 460, 300, 80, 'solid', '#505565');
+  S(2050, 320, 'reverse_zone', {w: 120, h: 160});
+  P(2050, 340, 100, 15, 'solid', '#605575');
+  S(2070, 305, 'key', {color: 'blue'});
+  P(2250, 460, 200, 80, 'solid', '#505565');
+  S(2350, 420, 'checkpoint');
+
+  // SECTION 5: Gravity flip (NO reverse zone - just gravity)
+  P(2400, 460, 600, 80, 'solid', '#505565');
+  P(2400, 100, 600, 20, 'solid', '#454555');
+  S(2500, 425, 'gravity_flip');
+  O(2700, 440, 40, 20, 'spike', 'up');
+  O(2700, 120, 40, 20, 'spike', 'down');
+  S(2800, 425, 'gravity_flip');
+  S(2800, 135, 'gravity_flip');
+  S(2900, 425, 'gravity_normal');
+  S(2950, 420, 'checkpoint');
+
+  // SECTION 6: Reverse zones (spikes BETWEEN zones, not inside)
+  P(3000, 460, 900, 80, 'solid', '#505565');
+  S(3080, 380, 'reverse_zone', {w: 80, h: 120});
+  O(3250, 440, 30, 20, 'spike', 'up');
+  S(3380, 380, 'reverse_zone', {w: 80, h: 120});
+  O(3550, 440, 30, 20, 'spike', 'up');
+  S(3680, 380, 'reverse_zone', {w: 80, h: 120});
+  S(3800, 420, 'checkpoint');
+
+  // SECTION 7: Saws (small reverse zone, widely spaced saws)
+  P(3850, 460, 600, 80, 'solid', '#505565');
+  P(3850, 200, 600, 20, 'solid', '#454555');
+  S(4000, 300, 'reverse_zone', {w: 150, h: 180});
+  O(3950, 340, 25, 25, 'saw_moving', 'vertical');
+  O(4200, 300, 25, 25, 'saw_moving', 'vertical');
+  S(4350, 420, 'checkpoint');
+
+  // SECTION 8: Gate + final (one small reverse zone, spaced spikes)
+  P(4400, 460, 200, 80, 'solid', '#505565');
+  S(4500, -40, 'gate', {color: 'blue', w: 20, h: 500});
+  P(4550, 460, 500, 80, 'solid', '#505565');
+  S(4650, 350, 'reverse_zone', {w: 120, h: 150});
+  O(4700, 440, 30, 20, 'spike', 'up');
+  O(4900, 440, 30, 20, 'spike', 'up');
+  P(5000, 460, 200, 80, 'solid', '#505565');
+  S(5100, 420, 'finish');
+}
+
+// ============ LEVEL 10: Lava Climb ============
+// New mechanic: Rising lava from the bottom - must keep climbing up
+function buildLevel10() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 10: Lava Climb! Lava rises - get to the top!"});
+
+  // Enable rising lava
+  S(0, 0, 'rising_lava', {speed: 0.3, startDelay: 120});
+
+  // Vertical climbing level - platforms staircase upward
+  // Ground start
+  P(0, 460, 300, 80, 'solid', '#6a4040');
+
+  // Climb section 1 - easy zigzag (90px gaps max)
+  P(180, 370, 180, 15, 'solid', '#7a5050');
+  P(0, 280, 180, 15, 'solid', '#7a5050');
+  P(200, 190, 180, 15, 'solid', '#7a5050');
+  S(250, 155, 'checkpoint');
+  S(50, 245, 'jump_orb');
+
+  // Climb section 2
+  P(0, 100, 180, 15, 'solid', '#7a5050');
+  P(200, 10, 180, 15, 'solid', '#7a5050');
+  P(0, -80, 180, 15, 'solid', '#7a5050');
+  S(50, -115, 'checkpoint');
+
+  // Climb section 3
+  P(200, -170, 180, 15, 'solid', '#7a5050');
+  P(0, -260, 180, 15, 'solid', '#7a5050');
+  S(50, -295, 'checkpoint');
+
+  // Climb section 4 - bounce pad (offset so nothing blocks above)
+  P(250, -350, 80, 15, 'bounce', '#d4a040');
+  P(50, -470, 180, 15, 'solid', '#7a5050');
+  S(100, -505, 'checkpoint');
+  S(100, -540, 'key', {color: 'orange'});
+
+  // Climb section 5
+  P(250, -560, 180, 15, 'solid', '#7a5050');
+  S(300, -630, 'jump_orb');
+  P(0, -650, 180, 15, 'solid', '#7a5050');
+  S(50, -685, 'checkpoint');
+
+  // Climb section 6 - final stretch
+  P(200, -740, 180, 15, 'solid', '#7a5050');
+  P(0, -830, 180, 15, 'solid', '#7a5050');
+
+  // Final platform
+  P(200, -920, 300, 15, 'solid', '#7a5050');
+  S(300, -1500, 'gate', {color: 'orange', w: 20, h: 500});
+  P(350, -920, 200, 80, 'solid', '#6a4040');
+  S(400, -960, 'finish');
+}
+
+// ============ LEVEL 11: Bagel Gauntlet ============
+// The ultimate level - combines EVERY mechanic
+function buildLevel11() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "Level 11: THE BAGEL GAUNTLET! Every obstacle awaits!"});
+
+  // SECTION 1: Ice slide into bounce
+  P(0, 460, 150, 80, 'solid', '#553344');
+  P(150, 460, 300, 80, 'ice', '#88ccee');
+  P(450, 460, 60, 20, 'bounce', '#d4a040');
+  P(600, 300, 120, 15, 'solid', '#664455');
+  O(510, 520, 100, 40, 'pit', 'up');
+  P(600, 460, 200, 80, 'solid', '#553344');
+  S(700, 420, 'checkpoint');
+
+  // SECTION 2: Conveyor belt + lasers
+  P(750, 460, 600, 20, 'conveyor', '#606070');
+  platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2;
+  P(750, 480, 600, 60, 'solid', '#553344');
+  S(900, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60});
+  S(1100, 200, 'laser_emitter', {dir: 'down', period: 160, onTime: 60, offset: 80});
+  S(1300, 420, 'checkpoint');
+
+  // SECTION 3: Reverse zone + fake platforms over pit
+  P(1350, 460, 150, 80, 'solid', '#553344');
+  S(1450, 300, 'reverse_zone', {w: 400, h: 200});
+  O(1500, 520, 400, 40, 'pit', 'up');
+  P(1550, 400, 70, 15, 'solid', '#664455');
+  P(1670, 370, 70, 15, 'fake', '#6a5741');
+  P(1790, 400, 70, 15, 'solid', '#664455');
+  P(1900, 460, 200, 80, 'solid', '#553344');
+  S(1950, 420, 'checkpoint');
+  S(1700, 330, 'jump_orb');
+
+  // SECTION 4: Grapple over saws
+  P(2000, 460, 300, 80, 'solid', '#553344');
+  S(2200, 350, 'jump_orb');
+  O(2250, 430, 30, 30, 'saw', 'up');
+  S(2350, 250, 'hook_point');
+  P(2500, 460, 200, 80, 'solid', '#553344');
+  S(2600, 420, 'checkpoint');
+  S(2550, 380, 'key', {color: 'red'});
+
+  // SECTION 5: Wind tunnel + gravity flip
+  P(2650, 460, 500, 80, 'solid', '#553344');
+  P(2650, 100, 500, 20, 'solid', '#443333');
+  S(2700, 425, 'gravity_flip');
+  S(2800, 350, 'wind', {dirX: 2, dirY: 0, w: 200, h: 200});
+  O(2900, 440, 40, 20, 'spike', 'up');
+  O(2900, 120, 40, 20, 'spike', 'down');
+  S(3000, 425, 'gravity_flip');
+  S(3000, 135, 'gravity_flip');
+  S(3100, 425, 'gravity_normal');
+  S(3100, 420, 'checkpoint');
+
+  // SECTION 6: Portal + catapult
+  P(3150, 460, 200, 80, 'solid', '#553344');
+  S(3250, 410, 'portal', {color: '#ff6600', pairId: 'F', label: 'F'});
+  P(3700, 300, 200, 80, 'solid', '#553344');
+  S(3750, 250, 'portal', {color: '#ff6600', pairId: 'F', label: 'F'});
+  S(3850, 270, 'catapult', {launchVX: 10, launchVY: -18, angle: -55});
+  P(4100, 460, 200, 80, 'solid', '#553344');
+  O(3350, 520, 350, 40, 'pit', 'up');
+  O(3900, 520, 200, 40, 'pit', 'up');
+  S(4150, 420, 'checkpoint');
+  S(4100, 380, 'key', {color: 'blue'});
+
+  // SECTION 7: Switch puzzle in darkness-lite + saws
+  P(4200, 460, 800, 80, 'solid', '#553344');
+  P(4350, 340, 60, 15, 'solid', '#664455');
+  S(4360, 305, 'switch', {id: 0, order: 1, label: '1', groupId: 'doorG'});
+  P(4550, 280, 60, 15, 'solid', '#664455');
+  S(4560, 245, 'switch', {id: 1, order: 2, label: '2', groupId: 'doorG'});
+  P(4750, 340, 60, 15, 'solid', '#664455');
+  S(4760, 305, 'switch', {id: 2, order: 3, label: '3', groupId: 'doorG'});
+  O(4450, 430, 30, 30, 'saw', 'up');
+  O(4650, 430, 30, 30, 'saw', 'up');
+  S(4900, -40, 'switch_door', {groupId: 'doorG', w: 20, h: 500, requiredOrder: [0, 1, 2]});
+  S(4850, 420, 'checkpoint');
+  S(4800, 350, 'key', {color: 'green'});
+
+  // SECTION 8: Triple gate + final gauntlet
+  P(4950, 460, 200, 80, 'solid', '#553344');
+  S(5050, -40, 'gate', {color: 'red', w: 20, h: 500});
+  S(5100, -40, 'gate', {color: 'blue', w: 20, h: 500});
+  S(5150, -40, 'gate', {color: 'green', w: 20, h: 500});
+  // Epic finale: ice + spikes + wind + lasers
+  P(5200, 460, 300, 80, 'ice', '#88ccee');
+  O(5300, 440, 30, 20, 'spike', 'up');
+  O(5400, 440, 30, 20, 'spike', 'up');
+  S(5450, 350, 'wind', {dirX: 0, dirY: -3, w: 80, h: 200});
+  P(5500, 250, 100, 15, 'solid', '#664455');
+  S(5520, 200, 'laser_emitter', {dir: 'down', period: 180, onTime: 60, offset: 90});
+  P(5600, 460, 200, 80, 'solid', '#553344');
+  S(5700, 420, 'finish');
+}
+
+// ============ LEVEL 12: BONUS - Ice Sprint ============
+function buildLevel12() {
+  const { P, O, S } = levelHelpers();
+  const ICE = (x, y, w, h) => P(x, y, w, h, 'ice', '#88ccee');
+
+  // Timer: 45 seconds to finish!
+  S(0, 0, 'countdown_timer', {seconds: 45});
+
+  S(50, 420, 'sign', {message: "BONUS: Ice Sprint! Reach the end in 45 seconds! GO GO GO!"});
+
+  // Long continuous ice track with minimal obstacles
+  // START
+  ICE(0, 460, 600, 80);
+
+  // Small jump
+  O(550, 520, 100, 40, 'pit', 'up');
+  ICE(650, 460, 500, 80);
+
+  // Hop over one spike
+  O(950, 440, 30, 20, 'spike', 'up');
+
+  ICE(1150, 460, 400, 80);
+
+  // Gap jump
+  O(1550, 520, 120, 40, 'pit', 'up');
+  ICE(1670, 460, 500, 80);
+
+  // Two spikes to hop
+  O(1900, 440, 30, 20, 'spike', 'up');
+  O(2050, 440, 30, 20, 'spike', 'up');
+
+  ICE(2170, 460, 400, 80);
+
+  // Step up
+  ICE(2570, 430, 300, 30);
+  ICE(2870, 400, 300, 20);
+
+  // One spike on the ramp
+  O(3000, 380, 30, 20, 'spike', 'up');
+
+  ICE(3170, 400, 300, 20);
+
+  // Drop back down
+  ICE(3470, 460, 500, 80);
+
+  // Gap
+  O(3970, 520, 100, 40, 'pit', 'up');
+  ICE(4070, 460, 400, 80);
+
+  // One saw to dodge
+  O(4300, 430, 25, 25, 'saw', 'up');
+
+  ICE(4470, 460, 500, 80);
+
+  // Final sprint - long straight ice
+  ICE(4970, 460, 800, 80);
+
+  // One last spike
+  O(5400, 440, 30, 20, 'spike', 'up');
+
+  // FINISH
+  ICE(5770, 460, 300, 80);
+  S(5900, 420, 'finish');
+}
+
+// ============ LEVEL 13: BONUS 2 - Smooth Glide ============
+function buildLevel13() {
+  const { P, O, S } = levelHelpers();
+  const ICE = (x, y, w, h) => P(x, y, w, h, 'ice', '#88ccee');
+
+  // 30 second timer!
+  S(0, 0, 'countdown_timer', {seconds: 15});
+  S(50, 420, 'sign', {message: "BONUS: Smooth Glide! Get home in 30 seconds! No obstacles - just SPEED!"});
+
+  // Long smooth ice track - no obstacles, all about speed
+  // Flat start - build speed
+  ICE(0, 460, 1000, 80);
+
+  // Gentle dip
+  ICE(1000, 470, 500, 70);
+  ICE(1500, 460, 500, 80);
+
+  // Smooth ramp up
+  ICE(2000, 440, 400, 20);
+  ICE(2400, 420, 400, 20);
+  ICE(2800, 400, 400, 20);
+
+  // High flat glide
+  ICE(3200, 400, 800, 20);
+
+  // Gentle slope back down
+  ICE(4000, 410, 400, 20);
+  ICE(4400, 430, 400, 20);
+  ICE(4800, 460, 600, 80);
+
+  // Rolling hills
+  ICE(5400, 440, 300, 20);
+  ICE(5700, 460, 500, 80);
+  ICE(6200, 440, 300, 20);
+  ICE(6500, 460, 500, 80);
+
+  // Second ramp up
+  ICE(7000, 440, 400, 20);
+  ICE(7400, 420, 400, 20);
+
+  // Long downhill back to ground
+  ICE(7800, 430, 400, 20);
+  ICE(8200, 450, 400, 20);
+  ICE(8600, 460, 800, 80);
+
+  // Final straight sprint
+  ICE(9400, 460, 1200, 80);
+
+  // Long glide to home
+  ICE(10600, 460, 800, 80);
+
+  // Finish
+  ICE(11400, 460, 300, 80);
+  S(11550, 420, 'finish');
+}
+
+// ============ LEVEL 14: BONUS 3 - Temporal Gauntlet ============
+function buildLevel14() {
+  const { P, O, S } = levelHelpers();
+
+  // No overall countdown - each section has its own time pressure
+  S(50, 420, 'sign', {message: "BONUS: Temporal Gauntlet! Everything here runs on a timer. Take your time and learn the patterns!"});
+
+  // ===== SECTION 1: Laser Intro - One laser, easy timing =====
+  P(0, 460, 600, 80);
+  S(300, 280, 'laser_emitter', {dir: 'down', period: 180, onTime: 60, offset: 0});
+  S(250, 420, 'sign', {message: "Lasers blink on and off. Wait for it to turn off, then run!"});
+
+  S(550, 420, 'checkpoint');
+
+  // ===== SECTION 2: Alternating Lasers - When one is on, the other is off =====
+  P(600, 460, 700, 80);
+  S(650, 420, 'sign', {message: "These two alternate - when one is off, the other is on. Dash between!"});
+  S(750, 280, 'laser_emitter', {dir: 'down', period: 180, onTime: 80, offset: 0});
+  S(950, 280, 'laser_emitter', {dir: 'down', period: 180, onTime: 80, offset: 90});
+
+  S(1200, 420, 'checkpoint');
+
+  // ===== SECTION 3: Timed Door - Hit button, run through =====
+  P(1300, 460, 900, 80);
+  S(1350, 420, 'sign', {message: "Hit the button then run! The door stays open for a while."});
+  S(1400, 430, 'timed_button', {doorId: 'door1', duration: 300});
+  S(1800, -40, 'timed_door', {doorId: 'door1', w: 20, h: 500, color: '#cc8844'});
+
+  S(1900, 420, 'checkpoint');
+
+  // ===== SECTION 4: Timed Door + One Spike =====
+  P(2000, 460, 1000, 80);
+  S(2050, 420, 'sign', {message: "Same idea but with a spike to hop over. You've got plenty of time!"});
+  S(2100, 430, 'timed_button', {doorId: 'door2', duration: 280});
+  O(2400, 440, 30, 20, 'spike', 'up');
+  S(2600, -40, 'timed_door', {doorId: 'door2', w: 20, h: 500, color: '#cc8844'});
+
+  S(2800, 420, 'checkpoint');
+
+  // ===== SECTION 5: Laser Staircase - Climb up, one laser at a time =====
+  P(2900, 460, 200, 80);
+  S(2950, 420, 'sign', {message: "Climb up! Each laser has its own rhythm. Wait, then jump."});
+  P(3100, 390, 140, 15);
+  S(3120, 210, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+  P(3280, 320, 140, 15);
+  S(3300, 140, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 70});
+  P(3460, 250, 180, 15);
+  S(3500, 210, 'key', {color: 'red'});
+
+  // Walk back down
+  P(3680, 330, 100, 15);
+  P(3680, 410, 100, 15);
+  P(3680, 460, 200, 80);
+  S(3750, 420, 'checkpoint');
+
+  // ===== SECTION 6: Laser Cascade - 3 lasers that fire in a wave =====
+  P(3900, 460, 900, 80);
+  S(3950, 420, 'sign', {message: "Three lasers in a wave! One is always off. Follow the gap!"});
+  S(4050, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 0});
+  S(4250, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 80});
+  S(4450, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 160});
+  // Red gate
+  S(4650, 430, 'gate', {color: 'red'});
+
+  S(4700, 420, 'checkpoint');
+
+  // ===== SECTION 7: Button Relay - Two buttons, two doors =====
+  P(4800, 460, 500, 80);
+  S(4850, 420, 'sign', {message: "Button relay! Hit button, run through door, hit next button, run through next door!"});
+  S(4900, 430, 'timed_button', {doorId: 'relay1', duration: 250});
+  S(5100, -40, 'timed_door', {doorId: 'relay1', w: 20, h: 500, color: '#44aacc'});
+
+  P(5200, 460, 500, 80);
+  S(5250, 430, 'timed_button', {doorId: 'relay2', duration: 250});
+  S(5450, -40, 'timed_door', {doorId: 'relay2', w: 20, h: 500, color: '#44aacc'});
+
+  S(5550, 420, 'checkpoint');
+
+  // ===== SECTION 8: Timed Door + Laser Combo =====
+  P(5650, 460, 700, 80);
+  S(5700, 420, 'sign', {message: "The grand finale! Hit the button, wait for the laser to turn off, then dash through!"});
+  S(5750, 430, 'timed_button', {doorId: 'final', duration: 300});
+  S(5950, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 70, offset: 0});
+  S(6100, -40, 'timed_door', {doorId: 'final', w: 20, h: 500, color: '#ffcc00'});
+
+  // FINISH
+  P(6200, 460, 300, 80);
+  S(6350, 420, 'finish');
+}
+
+// ============ LEVEL 15: BONUS 4 - Conveyor Chaos ============
+function buildLevel15() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "BONUS: Conveyor Chaos! Belts push you around - use them to beat the timed doors!"});
+
+  // ===== SECTION 1: Conveyor Intro - Belt pushes you forward =====
+  P(0, 460, 300, 80);
+  S(50, 420, 'sign', {message: "Conveyor belts push you! This one helps - ride it!"});
+  P(300, 460, 400, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 2;
+  P(300, 480, 400, 60);
+
+  S(650, 420, 'checkpoint');
+
+  // ===== SECTION 2: Belt + Timed Door - Belt helps you reach the door in time =====
+  P(700, 460, 200, 80);
+  S(750, 420, 'sign', {message: "Hit the button! The belt will help push you to the door."});
+  S(800, 430, 'timed_button', {doorId: 'cv1', duration: 250});
+  P(900, 460, 500, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  P(900, 480, 500, 60);
+  S(1300, -40, 'timed_door', {doorId: 'cv1', w: 20, h: 500, color: '#cc8844'});
+
+  P(1400, 460, 200, 80);
+  S(1500, 420, 'checkpoint');
+
+  // ===== SECTION 3: Reverse Belt - Fight the belt to reach the button =====
+  P(1600, 460, 200, 80);
+  S(1650, 420, 'sign', {message: "This belt pushes you BACK! Fight it to reach the button, then ride the next one."});
+  P(1800, 460, 400, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = -1; platforms[platforms.length-1].beltSpeed = 2;
+  P(1800, 480, 400, 60);
+  S(2100, 430, 'timed_button', {doorId: 'cv2', duration: 300});
+
+  P(2200, 460, 400, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  P(2200, 480, 400, 60);
+  S(2500, -40, 'timed_door', {doorId: 'cv2', w: 20, h: 500, color: '#cc8844'});
+
+  P(2600, 460, 200, 80);
+  S(2700, 420, 'checkpoint');
+
+  // ===== SECTION 4: Laser + Conveyor - Belt pushes you, time the laser =====
+  P(2800, 460, 800, 80);
+  S(2850, 420, 'sign', {message: "The belt pushes you toward the laser. Wait for it to turn off!"});
+  P(2900, 460, 500, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 1.5;
+  S(3200, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+
+  S(3500, 420, 'checkpoint');
+
+  // ===== SECTION 5: Belt Sprint - Two buttons, two doors, conveyors between =====
+  P(3600, 460, 300, 80);
+  S(3650, 420, 'sign', {message: "Double belt sprint! Buttons open the doors, belts help you get there!"});
+  S(3700, 430, 'timed_button', {doorId: 'cv3', duration: 250});
+  P(3900, 460, 300, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  P(3900, 480, 300, 60);
+  S(4100, -40, 'timed_door', {doorId: 'cv3', w: 20, h: 500, color: '#44aacc'});
+
+  P(4200, 460, 200, 80);
+  S(4250, 430, 'timed_button', {doorId: 'cv4', duration: 250});
+  P(4400, 460, 300, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  P(4400, 480, 300, 60);
+  S(4600, -40, 'timed_door', {doorId: 'cv4', w: 20, h: 500, color: '#44aacc'});
+
+  S(4700, 420, 'checkpoint');
+
+  // ===== SECTION 6: Reverse Belt + Laser + Timed Door =====
+  P(4800, 460, 900, 80);
+  S(4850, 420, 'sign', {message: "The belt fights you AND there's a laser! Hit button, wait for laser, push through!"});
+  S(4900, 430, 'timed_button', {doorId: 'cv5', duration: 350});
+  P(5000, 460, 400, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = -1; platforms[platforms.length-1].beltSpeed = 1.5;
+  S(5200, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+  S(5400, -40, 'timed_door', {doorId: 'cv5', w: 20, h: 500, color: '#ffcc00'});
+
+  // FINISH
+  P(5500, 460, 300, 80);
+  S(5650, 420, 'finish');
+}
+
+// ============ LEVEL 16: BONUS 5 - Portal Rush ============
+function buildLevel16() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "BONUS: Portal Rush! Portals warp you around - combine them with timed doors and lasers!"});
+
+  // ===== SECTION 1: Portal Intro =====
+  P(0, 460, 400, 80);
+  S(50, 420, 'sign', {message: "Step into a portal to warp! This one takes you ahead."});
+  S(300, 420, 'portal', {color: '#ff6600', pairId: 'pA', label: 'A'});
+  P(500, 460, 400, 80);
+  S(600, 420, 'portal', {color: '#ff6600', pairId: 'pA', label: 'A'});
+
+  S(800, 420, 'checkpoint');
+
+  // ===== SECTION 2: Portal + Timed Door - Warp past a door you opened =====
+  P(900, 460, 400, 80);
+  S(950, 420, 'sign', {message: "Hit the button, then take the portal to skip straight to the door!"});
+  S(1000, 430, 'timed_button', {doorId: 'pr1', duration: 300});
+  S(1200, 420, 'portal', {color: '#6644ff', pairId: 'pB', label: 'B'});
+  P(1400, 460, 500, 80);
+  S(1700, -40, 'timed_door', {doorId: 'pr1', w: 20, h: 500, color: '#cc8844'});
+  P(1720, 460, 200, 80);
+  S(1750, 420, 'portal', {color: '#6644ff', pairId: 'pB', label: 'B'});
+
+  P(1800, 460, 200, 80);
+  S(1900, 420, 'checkpoint');
+
+  // ===== SECTION 3: Portal Hop + Laser - Warp between safe spots =====
+  P(2000, 460, 300, 80);
+  S(2050, 420, 'sign', {message: "Lasers ahead! Use portals to warp between the safe zones."});
+  S(2200, 420, 'portal', {color: '#44cc44', pairId: 'pC', label: 'C'});
+  P(2350, 460, 200, 80);
+  S(2400, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 70, offset: 0});
+  P(2500, 460, 200, 80);
+  S(2600, 420, 'portal', {color: '#44cc44', pairId: 'pC', label: 'C'});
+
+  S(2650, 420, 'checkpoint');
+
+  // ===== SECTION 4: Two Portals + Timed Door =====
+  P(2750, 460, 300, 80);
+  S(2800, 420, 'sign', {message: "Hit the button, portal to the middle, then portal to the door!"});
+  S(2850, 430, 'timed_button', {doorId: 'pr2', duration: 350});
+  S(2950, 420, 'portal', {color: '#ff44aa', pairId: 'pD', label: 'D'});
+
+  P(3100, 460, 400, 80);
+  S(3350, 420, 'portal', {color: '#ff44aa', pairId: 'pD', label: 'D'});
+  S(3400, 420, 'portal', {color: '#44aaff', pairId: 'pE', label: 'E'});
+
+  P(3550, 460, 400, 80);
+  S(3750, -40, 'timed_door', {doorId: 'pr2', w: 20, h: 500, color: '#44aacc'});
+  P(3770, 460, 200, 80);
+  S(3800, 420, 'portal', {color: '#44aaff', pairId: 'pE', label: 'E'});
+
+  P(3850, 460, 200, 80);
+  S(3950, 420, 'checkpoint');
+
+  // ===== SECTION 5: Portal + Laser Dodge =====
+  P(4050, 460, 400, 80);
+  S(4100, 420, 'sign', {message: "Laser corridor! Each portal skips you past one laser."});
+  S(4200, 280, 'laser_emitter', {dir: 'down', period: 180, onTime: 70, offset: 0});
+  S(4250, 420, 'portal', {color: '#ffaa00', pairId: 'pF', label: 'F'});
+  P(4400, 460, 400, 80);
+  S(4550, 420, 'portal', {color: '#ffaa00', pairId: 'pF', label: 'F'});
+  S(4600, 280, 'laser_emitter', {dir: 'down', period: 180, onTime: 70, offset: 90});
+  S(4650, 420, 'portal', {color: '#ff4444', pairId: 'pG', label: 'G'});
+  P(4800, 460, 400, 80);
+  S(4950, 420, 'portal', {color: '#ff4444', pairId: 'pG', label: 'G'});
+
+  S(5050, 420, 'checkpoint');
+
+  // ===== SECTION 6: Portal + Button + Laser Finale =====
+  P(5150, 460, 600, 80);
+  S(5200, 420, 'sign', {message: "The big finish! Button, portal, dodge the laser, reach the door!"});
+  S(5250, 430, 'timed_button', {doorId: 'prfinal', duration: 350});
+  S(5350, 420, 'portal', {color: '#cc66ff', pairId: 'pH', label: 'H'});
+  P(5550, 460, 400, 80);
+  S(5650, 420, 'portal', {color: '#cc66ff', pairId: 'pH', label: 'H'});
+  S(5700, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+  S(5850, -40, 'timed_door', {doorId: 'prfinal', w: 20, h: 500, color: '#ffcc00'});
+
+  // FINISH
+  P(5950, 460, 300, 80);
+  S(6100, 420, 'finish');
+}
+
+// ============ LEVEL 17: BONUS 6 - Gravity Tick ============
+function buildLevel17() {
+  const { P, O, S } = levelHelpers();
+
+  // Continuous floor and ceiling throughout the whole level
+  P(0, 460, 5000, 80);
+  P(0, 50, 5000, 50);
+
+  S(50, 420, 'sign', {message: "BONUS: Gravity Tick! Purple pads flip gravity, green pads set it back to normal!"});
+
+  // ===== SECTION 1: Gravity Flip Intro =====
+  S(200, 420, 'sign', {message: "Step on the purple pad to flip! Walk on the ceiling, then hit the green pad to come back."});
+  S(300, 425, 'gravity_flip');
+  S(600, 100, 'gravity_normal');
+
+  S(700, 420, 'checkpoint');
+
+  // ===== SECTION 2: Flip Over Spikes =====
+  S(800, 420, 'sign', {message: "Spikes on the floor! Flip to the ceiling to walk over them."});
+  S(900, 425, 'gravity_flip');
+  O(1000, 440, 40, 20, 'spike', 'up');
+  O(1080, 440, 40, 20, 'spike', 'up');
+  O(1160, 440, 40, 20, 'spike', 'up');
+  S(1300, 100, 'gravity_normal');
+
+  S(1400, 420, 'checkpoint');
+
+  // ===== SECTION 3: Flip Over a Laser =====
+  S(1500, 420, 'sign', {message: "A laser blocks the path! Flip to the ceiling to go over it."});
+  S(1600, 425, 'gravity_flip');
+  S(1750, 280, 'laser_emitter', {dir: 'down', period: 300, onTime: 300, offset: 0});
+  S(1950, 100, 'gravity_normal');
+
+  S(2050, 420, 'checkpoint');
+
+  // ===== SECTION 4: Flip Back and Forth =====
+  S(2150, 420, 'sign', {message: "Zigzag! Flip up, walk a bit, flip back down. Pads on both sides."});
+  S(2300, 425, 'gravity_flip');
+  S(2500, 100, 'gravity_flip');
+  S(2700, 425, 'gravity_normal');
+
+  S(2800, 420, 'checkpoint');
+
+  // ===== SECTION 5: Timed Door + Gravity =====
+  S(2900, 420, 'sign', {message: "Hit the button, then flip to the ceiling. The door only blocks the floor!"});
+  S(3000, 430, 'timed_button', {doorId: 'gv1', duration: 400});
+  // Door only covers bottom half - ceiling path is clear
+  S(3200, 250, 'timed_door', {doorId: 'gv1', w: 20, h: 300, color: '#cc8844'});
+  S(3100, 425, 'gravity_flip');
+  S(3350, 100, 'gravity_normal');
+
+  S(3450, 420, 'checkpoint');
+
+  // ===== SECTION 6: Laser + Gravity Combo =====
+  S(3550, 420, 'sign', {message: "Laser ahead! Flip to dodge it, then flip back at the end. Take your time!"});
+  S(3700, 425, 'gravity_flip');
+  S(3850, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 0});
+  S(4050, 100, 'gravity_normal');
+
+  S(4150, 420, 'checkpoint');
+
+  // ===== SECTION 7: Button + Laser + Flip Finale =====
+  S(4250, 420, 'sign', {message: "Grand finale! Hit button, flip to ceiling to pass the laser, flip back to walk through the door!"});
+  S(4350, 430, 'timed_button', {doorId: 'gvfinal', duration: 450});
+  S(4450, 425, 'gravity_flip');
+  S(4550, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 0});
+  // Door only blocks floor half
+  S(4700, 250, 'timed_door', {doorId: 'gvfinal', w: 20, h: 300, color: '#ffcc00'});
+  S(4750, 100, 'gravity_normal');
+
+  // FINISH
+  S(4900, 420, 'finish');
+}
+
+// ============ LEVEL 18: BONUS 7 - Wind & Lasers ============
+function buildLevel18() {
+  const { P, O, S } = levelHelpers();
+
+  S(50, 420, 'sign', {message: "BONUS: Wind & Lasers! Wind pushes you - use it to dash past lasers and reach timed doors!"});
+
+  // ===== SECTION 1: Wind Intro - Get blown forward =====
+  P(0, 460, 600, 80);
+  S(50, 420, 'sign', {message: "Wind zones push you! This one blows you right. Ride it!"});
+  S(200, 350, 'wind', {dirX: 4, dirY: 0, w: 200, h: 150});
+
+  S(550, 420, 'checkpoint');
+
+  // ===== SECTION 2: Wind + Laser - Wind pushes you through a timed gap =====
+  P(650, 460, 700, 80);
+  S(700, 420, 'sign', {message: "The wind blows you toward the laser. Wait for it to turn off, then let the wind carry you!"});
+  S(800, 350, 'wind', {dirX: 3, dirY: 0, w: 250, h: 150});
+  S(1000, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+
+  S(1250, 420, 'checkpoint');
+
+  // ===== SECTION 3: Headwind + Timed Door =====
+  P(1350, 460, 800, 80);
+  S(1400, 420, 'sign', {message: "Headwind! It pushes you back. Hit button and push forward to reach the door!"});
+  S(1450, 430, 'timed_button', {doorId: 'wd1', duration: 350});
+  S(1600, 350, 'wind', {dirX: -2, dirY: 0, w: 300, h: 150});
+  S(1900, -40, 'timed_door', {doorId: 'wd1', w: 20, h: 500, color: '#cc8844'});
+
+  P(2000, 460, 200, 80);
+  S(2100, 420, 'checkpoint');
+
+  // ===== SECTION 4: Updraft - Wind pushes you up to a high platform =====
+  P(2200, 460, 300, 80);
+  S(2250, 420, 'sign', {message: "Updraft! The wind lifts you up. Jump into it to reach the top."});
+  S(2300, 300, 'wind', {dirX: 0, dirY: -5, w: 100, h: 200});
+  P(2280, 180, 150, 15);
+  S(2300, 140, 'key', {color: 'blue'});
+
+  // Come back down
+  P(2500, 300, 80, 15);
+  P(2500, 400, 80, 15);
+  P(2500, 460, 200, 80);
+  S(2600, 420, 'checkpoint');
+
+  // ===== SECTION 5: Wind Corridor - Alternating wind + lasers =====
+  P(2700, 460, 1000, 80);
+  S(2750, 420, 'sign', {message: "Wind corridor! Wind pushes you forward, but lasers block the way. Time your dashes!"});
+  S(2850, 350, 'wind', {dirX: 3, dirY: 0, w: 150, h: 150});
+  S(3000, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+  S(3100, 350, 'wind', {dirX: 3, dirY: 0, w: 150, h: 150});
+  S(3250, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 70});
+  // Blue gate
+  S(3500, 430, 'gate', {color: 'blue'});
+
+  S(3550, 420, 'checkpoint');
+
+  // ===== SECTION 6: Tailwind Sprint + Button + Laser + Door =====
+  P(3650, 460, 900, 80);
+  S(3700, 420, 'sign', {message: "Grand finale! Hit button, ride the tailwind, dodge the laser, reach the door!"});
+  S(3750, 430, 'timed_button', {doorId: 'wdfinal', duration: 350});
+  S(3900, 350, 'wind', {dirX: 4, dirY: 0, w: 300, h: 150});
+  S(4100, 280, 'laser_emitter', {dir: 'down', period: 200, onTime: 60, offset: 0});
+  S(4250, -40, 'timed_door', {doorId: 'wdfinal', w: 20, h: 500, color: '#ffcc00'});
+
+  // FINISH
+  P(4350, 460, 300, 80);
+  S(4500, 420, 'finish');
+}
+
+// ============ LEVEL 19: BONUS 8 - Time Master ============
+function buildLevel19() {
+  const { P, O, S } = levelHelpers();
+
+  // One big continuous floor for the whole level - no gaps to fall into
+  P(0, 460, 7000, 80);
+
+  S(50, 420, 'sign', {message: "BONUS: Time Master! The ultimate mix of everything. No rush - take your time!"});
+
+  // ===== SECTION 1: Single Laser Warmup =====
+  S(200, 420, 'sign', {message: "Simple laser. Wait for it to turn off, then walk through."});
+  S(400, 280, 'laser_emitter', {dir: 'down', period: 220, onTime: 60, offset: 0});
+
+  S(600, 420, 'checkpoint');
+
+  // ===== SECTION 2: Timed Door =====
+  S(700, 420, 'sign', {message: "Hit the button then run to the door before it closes!"});
+  S(800, 430, 'timed_button', {doorId: 'tm1', duration: 350});
+  S(1200, -40, 'timed_door', {doorId: 'tm1', w: 20, h: 500, color: '#cc8844'});
+
+  S(1350, 420, 'checkpoint');
+
+  // ===== SECTION 3: Wind + Laser =====
+  S(1450, 420, 'sign', {message: "Wind pushes you forward. Wait for the laser to turn off, then step into the wind!"});
+  S(1600, 350, 'wind', {dirX: 3, dirY: 0, w: 200, h: 150});
+  S(1900, 280, 'laser_emitter', {dir: 'down', period: 220, onTime: 60, offset: 0});
+
+  S(2100, 420, 'checkpoint');
+
+  // ===== SECTION 4: Conveyor + Timed Door =====
+  S(2200, 420, 'sign', {message: "Hit button, ride the belt to the door!"});
+  S(2300, 430, 'timed_button', {doorId: 'tm2', duration: 400});
+  P(2400, 460, 500, 20, 'conveyor', '#606070'); platforms[platforms.length-1].beltDir = 1; platforms[platforms.length-1].beltSpeed = 3;
+  S(2800, -40, 'timed_door', {doorId: 'tm2', w: 20, h: 500, color: '#44aacc'});
+
+  S(2950, 420, 'checkpoint');
+
+  // ===== SECTION 5: Gravity Flip + Spikes =====
+  P(3050, 50, 800, 50); // ceiling for this section
+  S(3100, 420, 'sign', {message: "Spikes ahead! Flip to the ceiling to walk over them."});
+  S(3200, 425, 'gravity_flip');
+  O(3350, 440, 40, 20, 'spike', 'up');
+  O(3430, 440, 40, 20, 'spike', 'up');
+  O(3510, 440, 40, 20, 'spike', 'up');
+  S(3650, 100, 'gravity_normal');
+
+  S(3800, 420, 'checkpoint');
+
+  // ===== SECTION 6: Portal + Timed Door =====
+  S(3900, 420, 'sign', {message: "Hit button, take the portal to jump ahead, walk through the open door!"});
+  S(4000, 430, 'timed_button', {doorId: 'tm3', duration: 400});
+  S(4100, 420, 'portal', {color: '#44cc44', pairId: 'tmC', label: 'C'});
+  S(4400, -40, 'timed_door', {doorId: 'tm3', w: 20, h: 500, color: '#cc8844'});
+  S(4500, 420, 'portal', {color: '#44cc44', pairId: 'tmC', label: 'C'});
+  S(4550, 420, 'key', {color: 'green'});
+
+  S(4700, 420, 'checkpoint');
+
+  // ===== SECTION 7: Laser Wave + Gate =====
+  S(4800, 420, 'sign', {message: "Three lasers in a wave - one is always off. Walk through the gaps!"});
+  S(4950, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 0});
+  S(5100, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 80});
+  S(5250, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 70, offset: 160});
+  S(5400, 430, 'gate', {color: 'green'});
+
+  S(5500, 420, 'checkpoint');
+
+  // ===== SECTION 8: Grand Finale =====
+  S(5600, 420, 'sign', {message: "Last one! Button, wind boost, wait for laser, through the door. You got this!"});
+  S(5700, 430, 'timed_button', {doorId: 'tmfinal', duration: 500});
+  S(5850, 350, 'wind', {dirX: 3, dirY: 0, w: 200, h: 150});
+  S(6100, 280, 'laser_emitter', {dir: 'down', period: 240, onTime: 60, offset: 0});
+  S(6300, -40, 'timed_door', {doorId: 'tmfinal', w: 20, h: 500, color: '#ffcc00'});
+
+  // FINISH
+  S(6500, 420, 'finish');
+}
+
+// ============ EXPRESSION SYSTEM ============
+let danceMode = false;
+let dancePose = 0; // 0=idle, 1=left, 2=right, 3=up, 4=down
+
+// Sleep/idle system
+let idleFrames = 0;
+const SLEEP_THRESHOLD = 1200; // ~10 seconds at 120 updates/sec
+let sleepMode = false;
+let sleepTimer = 0; // grows after falling asleep, drives dream animations
+let dreamFishX = 0; // fish swimming position
+let dreamYarnAngle = 0; // yarn ball rolling
+
+function getExpression() {
+  // Returns: 'normal', 'happy', 'scared', 'falling', 'grapple', 'wind', 'dancing'
+  if (sleepMode) return 'sleeping';
+  if (danceMode) return 'dancing';
+  if (player.grappling) return 'grapple';
+  if (!player.onGround && player.vy > 6) return 'scared';
+  if (!player.onGround && player.vy < -4) return 'happy';
+  if (Math.abs(player.vx) > 3) return 'happy';
+  // Check if in wind
+  const px = player.x + player.w/2, py = player.y + player.h/2;
+  for (const s of specials) {
+    if (s.type !== 'wind') continue;
+    const ww = s.w || 80, wh = s.h || 160;
+    const wx = s.x + 15 - ww/2, wy = s.y + 15 - wh/2;
+    if (px > wx && px < wx + ww && py > wy && py < wy + wh) return 'wind';
+  }
+  if (player.onIce && Math.abs(player.vx) > 2) return 'sliding';
+  return 'normal';
+}
+
+// ============ DRAW BAGEL CAT ============
+function drawBagelCat(x, y, facingRight, tailWag, gravityDir) {
+  const expr = getExpression();
+  ctx.save();
+  ctx.translate(x + player.w/2, y + player.h/2);
+  if (gravityDir === -1) ctx.scale(1, -1);
+  if (!facingRight) ctx.scale(-1, 1);
+
+  // Dance mode / ice skating body transforms
+  let bodyTilt = 0;
+  let bodyBob = 0;
+  let legPoseL = 0, legPoseR = 0;
+  if (expr === 'sliding') {
+    // Ice skating pose: lean back, one leg out
+    bodyTilt = -0.15;
+    const skatePhase = Math.sin(frameCount * 0.12);
+    legPoseL = skatePhase * 0.4;
+    legPoseR = -skatePhase * 0.4;
+  } else if (expr === 'sleeping') {
+    // Gentle breathing bob
+    bodyBob = Math.sin(frameCount * 0.04) * 2;
+  } else if (danceMode) {
+    const dt = frameCount * 0.15;
+    if (dancePose === 1) { bodyTilt = -0.2; legPoseL = 0.4; }
+    else if (dancePose === 2) { bodyTilt = 0.2; legPoseR = 0.4; }
+    else if (dancePose === 3) { bodyBob = -6; legPoseL = -0.3; legPoseR = -0.3; }
+    else if (dancePose === 4) { bodyBob = 4; legPoseL = 0.5; legPoseR = 0.5; }
+    else { bodyBob = Math.sin(dt) * 3; }
+  }
+
+  ctx.rotate(bodyTilt);
+  ctx.translate(0, bodyBob);
+
+  // Tail (striped, wagging)
+  ctx.save();
+  const wagSpeed = danceMode ? 0.6 : (expr === 'happy' ? 0.5 : 0.3);
+  const wagAngle = Math.sin(tailWag * (danceMode ? 2 : 1)) * wagSpeed;
+  ctx.translate(-14, 10);
+  ctx.rotate(-0.5 + wagAngle);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#e8b830' : '#f0d060';
+    ctx.fillRect(-18 + i*5, -3, 5, 8);
+  }
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-18, -3, 20, 8);
+  ctx.restore();
+
+  // Body (small, below bagel)
+  ctx.fillStyle = '#f0d060';
+  ctx.beginPath();
+  ctx.ellipse(0, 12, 12, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Legs/paws with dance poses
+  ctx.fillStyle = '#e8b830';
+  const onIceNow = player.onIce;
+  // Left leg
+  ctx.save();
+  ctx.translate(-8, 18);
+  ctx.rotate(legPoseL);
+  ctx.fillRect(-4, 0, 8, 6);
+  ctx.strokeRect(-4, 0, 8, 6);
+  // Ice skate on left foot
+  if (onIceNow) {
+    // Boot
+    ctx.fillStyle = '#f0f0f0';
+    ctx.beginPath();
+    ctx.moveTo(-5, 4);
+    ctx.lineTo(5, 4);
+    ctx.lineTo(6, 6);
+    ctx.lineTo(6, 10);
+    ctx.lineTo(-5, 10);
+    ctx.lineTo(-6, 8);
+    ctx.lineTo(-5, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Boot top cuff
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(-5, 4, 10, 2);
+    // Lace detail
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(-1, 5); ctx.lineTo(1, 6.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1, 6.5); ctx.lineTo(1, 8); ctx.stroke();
+    // Sole
+    ctx.fillStyle = '#555';
+    ctx.fillRect(-6, 10, 13, 2);
+    // Blade holder
+    ctx.fillStyle = '#777';
+    ctx.fillRect(-5, 12, 2, 2);
+    ctx.fillRect(4, 12, 2, 2);
+    // Blade - shiny steel
+    ctx.strokeStyle = '#ddeeff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-7, 14);
+    ctx.quadraticCurveTo(-8, 13, -7, 12);
+    ctx.lineTo(7, 12);
+    ctx.quadraticCurveTo(9, 12, 8, 14);
+    ctx.stroke();
+    // Blade shine
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(-5, 13);
+    ctx.lineTo(5, 13);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Right leg
+  ctx.save();
+  ctx.translate(8, 18);
+  ctx.rotate(legPoseR);
+  ctx.fillStyle = '#e8b830';
+  ctx.fillRect(-4, 0, 8, 6);
+  ctx.strokeRect(-4, 0, 8, 6);
+  // Ice skate on right foot
+  if (onIceNow) {
+    // Boot
+    ctx.fillStyle = '#f0f0f0';
+    ctx.beginPath();
+    ctx.moveTo(-5, 4);
+    ctx.lineTo(5, 4);
+    ctx.lineTo(6, 6);
+    ctx.lineTo(6, 10);
+    ctx.lineTo(-5, 10);
+    ctx.lineTo(-6, 8);
+    ctx.lineTo(-5, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Boot top cuff
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(-5, 4, 10, 2);
+    // Lace detail
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(-1, 5); ctx.lineTo(1, 6.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1, 6.5); ctx.lineTo(1, 8); ctx.stroke();
+    // Sole
+    ctx.fillStyle = '#555';
+    ctx.fillRect(-6, 10, 13, 2);
+    // Blade holder
+    ctx.fillStyle = '#777';
+    ctx.fillRect(-5, 12, 2, 2);
+    ctx.fillRect(4, 12, 2, 2);
+    // Blade - shiny steel
+    ctx.strokeStyle = '#ddeeff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-7, 14);
+    ctx.quadraticCurveTo(-8, 13, -7, 12);
+    ctx.lineTo(7, 12);
+    ctx.quadraticCurveTo(9, 12, 8, 14);
+    ctx.stroke();
+    // Blade shine
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(-5, 13);
+    ctx.lineTo(5, 13);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Bagel (big circle with hole)
+  ctx.fillStyle = '#c87830';
+  ctx.beginPath();
+  ctx.arc(0, -4, 20, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d89040';
+  ctx.beginPath();
+  ctx.arc(0, -4, 16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e8c878';
+  ctx.beginPath();
+  ctx.arc(0, -4, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#805020';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, -4, 20, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -4, 9, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Cat face in bagel hole
+  ctx.fillStyle = '#e8b830';
+  ctx.beginPath();
+  ctx.arc(0, -2, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  ctx.fillStyle = '#e8b830';
+  ctx.beginPath(); ctx.moveTo(-7, -8); ctx.lineTo(-4, -15); ctx.lineTo(-1, -8); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(1, -8); ctx.lineTo(4, -15); ctx.lineTo(7, -8); ctx.fill();
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-7, -8); ctx.lineTo(-4, -15); ctx.lineTo(-1, -8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1, -8); ctx.lineTo(4, -15); ctx.lineTo(7, -8); ctx.stroke();
+
+  // ===== EYES (expression-based) =====
+  if (expr === 'sleeping') {
+    // Peaceful closed eyes - gentle curved lines
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-3, -2, 2, 0.2, Math.PI - 0.2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(3, -2, 2, 0.2, Math.PI - 0.2); ctx.stroke();
+  } else if (expr === 'scared') {
+    // Wide open eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-3, -4, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -4, 3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-3, -3.5, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -3.5, 1.5, 0, Math.PI*2); ctx.fill();
+  } else if (expr === 'happy' || expr === 'dancing') {
+    // Happy squint eyes (closed arcs)
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-3, -3, 2.5, Math.PI + 0.3, -0.3); ctx.stroke();
+    ctx.beginPath(); ctx.arc(3, -3, 2.5, Math.PI + 0.3, -0.3); ctx.stroke();
+  } else if (expr === 'grapple') {
+    // Determined eyes - looking up
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-3, -4.5, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -4.5, 1.5, 0, Math.PI*2); ctx.fill();
+    // Eyebrows
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-5, -6.5); ctx.lineTo(-1, -7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(5, -6.5); ctx.lineTo(1, -7); ctx.stroke();
+  } else if (expr === 'wind' || expr === 'sliding') {
+    // Squinting against wind/sliding
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(-1, -3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(1, -3); ctx.lineTo(5, -3); ctx.stroke();
+  } else {
+    // Normal eyes
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-3, -3, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -3, 1.5, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = '#d08080';
+  ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI*2); ctx.fill();
+
+  // ===== MOUTH (expression-based) =====
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 0.8;
+  if (expr === 'sleeping') {
+    // Tiny peaceful smile
+    ctx.beginPath(); ctx.arc(0, 1, 2.5, 0.3, Math.PI - 0.3); ctx.stroke();
+  } else if (expr === 'scared') {
+    // Open mouth "O"
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.ellipse(0, 2, 2.5, 3, 0, 0, Math.PI*2); ctx.fill();
+  } else if (expr === 'happy' || expr === 'dancing') {
+    // Big smile
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0.5, 4, 0.2, Math.PI - 0.2); ctx.stroke();
+  } else if (expr === 'grapple') {
+    // Gritting teeth / determined
+    ctx.beginPath(); ctx.moveTo(-3, 2); ctx.lineTo(3, 2); ctx.stroke();
+  } else if (expr === 'wind' || expr === 'sliding') {
+    // Wavy mouth
+    ctx.beginPath();
+    ctx.moveTo(-3, 2);
+    ctx.quadraticCurveTo(-1, 1, 0, 2);
+    ctx.quadraticCurveTo(1, 3, 3, 2);
+    ctx.stroke();
+  } else {
+    // Normal mouth
+    ctx.beginPath(); ctx.arc(-2, 1.5, 2, 0, Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(2, 1.5, 2, 0, Math.PI); ctx.stroke();
+  }
+
+  // Blush when happy/dancing/sleeping
+  if (expr === 'happy' || expr === 'dancing' || expr === 'sleeping') {
+    ctx.fillStyle = 'rgba(255, 130, 130, 0.35)';
+    ctx.beginPath(); ctx.ellipse(-6, 0, 3, 2, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(6, 0, 3, 2, 0, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Whiskers
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(-5, -1); ctx.lineTo(-10, -3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-5, 1); ctx.lineTo(-10, 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, -1); ctx.lineTo(10, -3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, 1); ctx.lineTo(10, 2); ctx.stroke();
+
+  // Dance sparkles
+  if (danceMode && dancePose > 0) {
+    ctx.fillStyle = '#ffdd44';
+    for (let i = 0; i < 3; i++) {
+      const sa = frameCount * 0.2 + i * 2.1;
+      const sr = 25 + Math.sin(sa * 1.5) * 5;
+      const spx = Math.cos(sa) * sr;
+      const spy = Math.sin(sa) * sr - 5;
+      const ss = 1.5 + Math.sin(sa * 3) * 0.8;
+      ctx.beginPath(); ctx.arc(spx, spy, ss, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+// ============ SLEEP & DREAM ============
+function drawSleepAndDream(screenX, screenY) {
+  if (!sleepMode) return;
+  const t = sleepTimer;
+
+  // --- Zzz floating upward ---
+  ctx.save();
+  ctx.font = 'bold 14px Arial';
+  for (let i = 0; i < 3; i++) {
+    const zAge = ((t * 0.6 + i * 60) % 180); // cycles 0-180
+    const zy = screenY - 30 - zAge * 0.5;
+    const zx = screenX + 25 + Math.sin(zAge * 0.04) * 8 + i * 6;
+    const alpha = zAge < 30 ? zAge / 30 : Math.max(0, 1 - (zAge - 120) / 60);
+    const size = 8 + i * 3;
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fillStyle = '#aaccff';
+    ctx.font = `bold ${size}px Arial`;
+    ctx.fillText('z', zx, zy);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // --- Dream bubble (fades in after 2 seconds of sleep) ---
+  const dreamFadeIn = Math.min(1, Math.max(0, (t - 240) / 120));
+  if (dreamFadeIn <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = dreamFadeIn;
+
+  // Thought bubble trail (small circles leading to dream)
+  const bx = screenX + 10;
+  const by = screenY - 35;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(bx + 8, by - 14, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(bx + 18, by - 30, 9, 0, Math.PI * 2); ctx.fill();
+
+  // Main dream bubble
+  const cx = screenX + 55;
+  const cy = screenY - 95;
+  const bw = 90, bh = 55;
+
+  // Bubble shape (rounded cloud)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, bw/2, bh/2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Bumpy cloud edges
+  ctx.beginPath(); ctx.arc(cx - 30, cy - 10, 18, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 30, cy - 10, 18, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx - 15, cy - 22, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 15, cy - 22, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy + 15, 18, 0, Math.PI * 2); ctx.fill();
+
+  // Clip to bubble for dream contents
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, bw/2 + 10, bh/2 + 12, 0, 0, Math.PI * 2);
+  ctx.clip();
+
+  // === DREAM SCENE: A cat's paradise ===
+  // Sunny sky background
+  const skyGrad = ctx.createLinearGradient(cx - 45, cy - 30, cx - 45, cy + 30);
+  skyGrad.addColorStop(0, '#87CEEB');
+  skyGrad.addColorStop(1, '#b8e8ff');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(cx - 50, cy - 35, 100, 70);
+
+  // Sun in corner
+  ctx.fillStyle = '#FFE066';
+  ctx.beginPath(); ctx.arc(cx + 35, cy - 25, 10, 0, Math.PI * 2); ctx.fill();
+  // Sun rays
+  ctx.strokeStyle = '#FFE066';
+  ctx.lineWidth = 1;
+  for (let r = 0; r < 8; r++) {
+    const ra = r * Math.PI / 4 + Math.sin(t * 0.02) * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(cx + 35 + Math.cos(ra) * 11, cy - 25 + Math.sin(ra) * 11);
+    ctx.lineTo(cx + 35 + Math.cos(ra) * 15, cy - 25 + Math.sin(ra) * 15);
+    ctx.stroke();
+  }
+
+  // Green grassy ground
+  ctx.fillStyle = '#7ec850';
+  ctx.fillRect(cx - 50, cy + 12, 100, 25);
+  // Grass blades
+  ctx.strokeStyle = '#5ba030';
+  ctx.lineWidth = 1;
+  for (let g = -45; g < 50; g += 8) {
+    const gh = 4 + Math.sin(g + t * 0.03) * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + g, cy + 12);
+    ctx.quadraticCurveTo(cx + g + 2, cy + 12 - gh, cx + g + 4, cy + 12);
+    ctx.stroke();
+  }
+
+  // === BIG GLORIOUS FISH swimming by ===
+  const fishPhase = Math.sin(t * 0.02);
+  const fishX = cx - 20 + ((dreamFishX * 0.3) % 80) - 30;
+  const fishY = cy - 5 + fishPhase * 4;
+
+  // Fish body
+  ctx.fillStyle = '#FF7744';
+  ctx.beginPath();
+  ctx.ellipse(fishX, fishY, 16, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Fish tail
+  ctx.beginPath();
+  ctx.moveTo(fishX - 14, fishY);
+  ctx.lineTo(fishX - 22, fishY - 7);
+  ctx.lineTo(fishX - 22, fishY + 7);
+  ctx.closePath();
+  ctx.fill();
+  // Fish belly shine
+  ctx.fillStyle = '#FFAA77';
+  ctx.beginPath();
+  ctx.ellipse(fishX + 2, fishY + 2, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Fish eye
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(fishX + 8, fishY - 2, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(fishX + 9, fishY - 2, 1.5, 0, Math.PI * 2); ctx.fill();
+  // Fish scales detail
+  ctx.strokeStyle = 'rgba(200, 80, 40, 0.4)';
+  ctx.lineWidth = 0.5;
+  for (let s = -8; s < 8; s += 5) {
+    ctx.beginPath(); ctx.arc(fishX + s, fishY, 4, -0.5, 1); ctx.stroke();
+  }
+  // Sparkles around the fish (it's a DREAM fish!)
+  ctx.fillStyle = '#FFE066';
+  for (let sp = 0; sp < 4; sp++) {
+    const spa = t * 0.05 + sp * 1.6;
+    const spr = 20 + Math.sin(spa * 2) * 3;
+    const spx = fishX + Math.cos(spa) * spr;
+    const spy = fishY + Math.sin(spa) * spr;
+    const sps = 1 + Math.sin(spa * 3) * 0.5;
+    ctx.beginPath(); ctx.arc(spx, spy, sps, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // === YARN BALL on the ground ===
+  const yarnX = cx + 25;
+  const yarnY = cy + 8;
+  const yarnR = 7;
+  // Ball
+  ctx.fillStyle = '#DD4488';
+  ctx.beginPath(); ctx.arc(yarnX, yarnY, yarnR, 0, Math.PI * 2); ctx.fill();
+  // Yarn string lines wrapping around
+  ctx.strokeStyle = '#CC3377';
+  ctx.lineWidth = 0.8;
+  for (let yl = 0; yl < 4; yl++) {
+    const ya = dreamYarnAngle + yl * 0.8;
+    ctx.beginPath();
+    ctx.arc(yarnX, yarnY, yarnR - 1, ya, ya + 1.8);
+    ctx.stroke();
+  }
+  // Highlight
+  ctx.fillStyle = 'rgba(255, 200, 230, 0.5)';
+  ctx.beginPath(); ctx.arc(yarnX - 2, yarnY - 2, 3, 0, Math.PI * 2); ctx.fill();
+  // Trailing yarn string
+  ctx.strokeStyle = '#DD4488';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(yarnX + yarnR, yarnY + 2);
+  ctx.quadraticCurveTo(yarnX + 14, yarnY + 10, yarnX + 10, yarnY + 18);
+  ctx.stroke();
+
+  // === Little butterfly for the cat to chase ===
+  const bfX = cx - 30 + Math.sin(t * 0.025) * 15;
+  const bfY = cy - 15 + Math.cos(t * 0.035) * 8;
+  const wingFlap = Math.sin(t * 0.15) * 0.4;
+  ctx.fillStyle = '#CC88FF';
+  // Left wing
+  ctx.save();
+  ctx.translate(bfX, bfY);
+  ctx.rotate(-wingFlap);
+  ctx.beginPath(); ctx.ellipse(-3, 0, 4, 3, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Right wing
+  ctx.save();
+  ctx.translate(bfX, bfY);
+  ctx.rotate(wingFlap);
+  ctx.beginPath(); ctx.ellipse(3, 0, 4, 3, 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Body
+  ctx.fillStyle = '#664488';
+  ctx.fillRect(bfX - 0.5, bfY - 2, 1, 4);
+
+  ctx.restore(); // unclip
+
+  // Bubble outline (subtle)
+  ctx.strokeStyle = 'rgba(200, 210, 230, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, bw/2, bh/2, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ============ PARTICLES ============
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6 - 2,
+      life: 30 + Math.random() * 20,
+      maxLife: 50,
+      color,
+      size: 2 + Math.random() * 3,
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.1;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camera.x, p.y - camera.y, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ============ BACKGROUND ============
+function drawBackground() {
+  // Sky gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#1a1a3e');
+  grad.addColorStop(0.5, '#2a2a5e');
+  grad.addColorStop(1, '#1a3a4e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars (parallax)
+  ctx.fillStyle = '#ffffff';
+  const starSeed = [23, 67, 134, 189, 245, 312, 398, 456, 523, 601, 678, 745, 812, 889, 934, 12, 78, 156, 223, 289, 367, 445, 512, 589, 667, 734, 801, 878, 945];
+  for (let i = 0; i < starSeed.length; i++) {
+    const sx = ((starSeed[i] * 7 + i * 200) % (W + 400)) - (camera.x * 0.1) % (W + 400);
+    const sy = (starSeed[i] * 3 + i * 50) % (H - 100);
+    const twinkle = Math.sin(frameCount * 0.05 + i) * 0.3 + 0.7;
+    ctx.globalAlpha = twinkle;
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  // Distant mountains (parallax)
+  ctx.fillStyle = '#1a2a3a';
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W + 100; x += 50) {
+    const worldX = x + camera.x * 0.2;
+    const mountainY = H - 120 + Math.sin(worldX * 0.003) * 60 + Math.sin(worldX * 0.007) * 30;
+    ctx.lineTo(x, mountainY);
+  }
+  ctx.lineTo(W, H);
+  ctx.fill();
+
+  // Closer hills (parallax)
+  ctx.fillStyle = '#1a3535';
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W + 100; x += 30) {
+    const worldX = x + camera.x * 0.4;
+    const hillY = H - 80 + Math.sin(worldX * 0.005) * 40 + Math.sin(worldX * 0.012) * 20;
+    ctx.lineTo(x, hillY);
+  }
+  ctx.lineTo(W, H);
+  ctx.fill();
+}
+
+// ============ DRAW FUNCTIONS ============
+function drawPlatform(p) {
+  const sx = p.x - camera.x;
+  const sy = p.y - camera.y;
+
+  if (sx + p.w < -50 || sx > W + 50) return;
+
+  if (p.type === 'conveyor') {
+    // Conveyor belt
+    ctx.fillStyle = '#555566';
+    ctx.fillRect(sx, sy, p.w, p.h);
+    // Belt lines (animated)
+    ctx.strokeStyle = '#777788';
+    ctx.lineWidth = 1;
+    const dir = p.beltDir || 1;
+    const speed = p.beltSpeed || 2;
+    const offset = (frameCount * speed * dir) % 20;
+    for (let lx = -20 + offset; lx < p.w + 20; lx += 20) {
+      ctx.beginPath();
+      ctx.moveTo(sx + lx, sy + 2);
+      ctx.lineTo(sx + lx + 8 * dir, sy + p.h - 2);
+      ctx.stroke();
+    }
+    // Rollers at edges
+    ctx.fillStyle = '#444455';
+    ctx.beginPath(); ctx.arc(sx + 8, sy + p.h/2, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + p.w - 8, sy + p.h/2, 6, 0, Math.PI * 2); ctx.fill();
+    // Direction arrows
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '12px Arial';
+    ctx.fillText(dir > 0 ? '>>>' : '<<<', sx + p.w/2 - 12, sy + p.h/2 + 4);
+    // Border
+    ctx.strokeStyle = '#444';
+    ctx.strokeRect(sx, sy, p.w, p.h);
+  } else if (p.type === 'ice') {
+    // Ice platform - shiny light blue
+    const iceGrad = ctx.createLinearGradient(sx, sy, sx, sy + p.h);
+    iceGrad.addColorStop(0, '#aaddff');
+    iceGrad.addColorStop(0.3, '#77bbee');
+    iceGrad.addColorStop(1, '#5599cc');
+    ctx.fillStyle = iceGrad;
+    ctx.fillRect(sx, sy, p.w, p.h);
+    // Shine streaks
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(sx, sy, p.w, 3);
+    for (let i = 0; i < p.w; i += 40) {
+      const shineX = sx + i + (frameCount * 0.5 + i) % 60;
+      if (shineX < sx + p.w - 10) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(shineX, sy + 1, 15, 2);
+      }
+    }
+    // Sparkle dots
+    for (let i = 0; i < p.w; i += 30) {
+      const sparkle = Math.sin(frameCount * 0.1 + i * 0.3) * 0.3 + 0.3;
+      ctx.fillStyle = `rgba(255, 255, 255, ${sparkle})`;
+      ctx.beginPath();
+      ctx.arc(sx + i + 15, sy + 4, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Border
+    ctx.strokeStyle = '#4488aa';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx, sy, p.w, p.h);
+  } else if (p.type === 'bounce') {
+    // Yellow bouncy platform
+    ctx.fillStyle = '#d4a040';
+    ctx.fillRect(sx, sy, p.w, p.h);
+    ctx.fillStyle = '#f0c040';
+    ctx.fillRect(sx + 2, sy + 2, p.w - 4, p.h/2);
+    // Spring lines
+    ctx.strokeStyle = '#a07020';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const lx = sx + 10 + i * (p.w - 20) / 2;
+      ctx.beginPath();
+      ctx.moveTo(lx, sy + p.h);
+      ctx.lineTo(lx - 3, sy + p.h + 5);
+      ctx.lineTo(lx + 3, sy + p.h + 8);
+      ctx.lineTo(lx - 3, sy + p.h + 11);
+      ctx.lineTo(lx, sy + p.h + 14);
+      ctx.stroke();
+    }
+  } else if (p.type === 'fake') {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(sx, sy, p.w, p.h);
+    // Draw cracks to hint it's fake
+    ctx.strokeStyle = '#33221188';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(sx + 10, sy + 2);
+    ctx.lineTo(sx + p.w/2, sy + p.h - 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx + p.w - 15, sy + 3);
+    ctx.lineTo(sx + p.w/2 + 5, sy + p.h - 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Subtle red tint
+    ctx.fillStyle = 'rgba(200, 50, 50, 0.1)';
+    ctx.fillRect(sx, sy, p.w, p.h);
+  } else {
+    // Regular platform
+    ctx.fillStyle = p.color;
+    ctx.fillRect(sx, sy, p.w, p.h);
+    // Top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(sx, sy, p.w, 3);
+    // Grass/detail on top for ground
+    if (p.h >= 40) {
+      ctx.fillStyle = '#5a8841';
+      ctx.fillRect(sx, sy, p.w, 5);
+      // Grass tufts
+      ctx.fillStyle = '#6a9951';
+      for (let gx = sx; gx < sx + p.w; gx += 12) {
+        ctx.fillRect(gx, sy - 3, 3, 5);
+        ctx.fillRect(gx + 5, sy - 2, 2, 4);
+      }
+    }
+  }
+
+  // Border
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx, sy, p.w, p.h);
+}
+
+function drawObstacle(o) {
+  const sx = o.x - camera.x;
+  const sy = o.y - camera.y;
+
+  if (sx + o.w < -50 || sx > W + 50) return;
+
+  if (o.type === 'spike') {
+    ctx.fillStyle = '#cc3333';
+    ctx.strokeStyle = '#881111';
+    ctx.lineWidth = 1.5;
+    const numSpikes = Math.floor(o.w / 15);
+    for (let i = 0; i < numSpikes; i++) {
+      const bx = sx + i * (o.w / numSpikes);
+      const bw = o.w / numSpikes;
+      ctx.beginPath();
+      if (o.dir === 'up') {
+        ctx.moveTo(bx, sy + o.h);
+        ctx.lineTo(bx + bw/2, sy);
+        ctx.lineTo(bx + bw, sy + o.h);
+      } else {
+        ctx.moveTo(bx, sy);
+        ctx.lineTo(bx + bw/2, sy + o.h);
+        ctx.lineTo(bx + bw, sy);
+      }
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (o.type === 'saw' || o.type === 'saw_moving') {
+    const cx = sx + o.w/2;
+    const cy = sy + o.h/2;
+    const r = o.w/2;
+    const rot = frameCount * 0.1;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+
+    // Saw blade
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath();
+    const teeth = 8;
+    for (let i = 0; i < teeth; i++) {
+      const a1 = (i / teeth) * Math.PI * 2;
+      const a2 = ((i + 0.5) / teeth) * Math.PI * 2;
+      ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
+      ctx.lineTo(Math.cos(a2) * (r * 0.7), Math.sin(a2) * (r * 0.7));
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Center circle
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#555';
+    ctx.stroke();
+
+    ctx.restore();
+  } else if (o.type === 'pit') {
+    // Invisible death zone - just draw some danger markers
+    // Lava/void at bottom
+    ctx.fillStyle = '#220808';
+    ctx.fillRect(sx, sy, o.w, o.h);
+    // Glow
+    const glowIntensity = Math.sin(frameCount * 0.08) * 0.2 + 0.3;
+    ctx.fillStyle = `rgba(200, 30, 30, ${glowIntensity})`;
+    ctx.fillRect(sx, sy, o.w, 5);
+  }
+}
+
+function drawSpecial(s) {
+  if (s.collected || !s.active) return;
+  const sx = s.x - camera.x;
+  const sy = s.y - camera.y;
+  if (sx + s.w < -50 || sx > W + 50) return;
+
+  const bob = Math.sin(frameCount * 0.05 + s.x) * 3;
+
+  if (s.type === 'checkpoint') {
+    // Flag
+    const active = (checkpointX === s.x && Math.abs(checkpointY - (s.y - player.h)) < 50);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(sx + 13, sy - 10, 3, 45);
+    ctx.fillStyle = active ? '#44dd44' : '#dddd44';
+    ctx.beginPath();
+    ctx.moveTo(sx + 16, sy - 8);
+    ctx.lineTo(sx + 36, sy);
+    ctx.lineTo(sx + 16, sy + 8);
+    ctx.fill();
+    // Text
+    ctx.fillStyle = active ? '#44ff44' : '#ffff44';
+    ctx.font = '10px Arial';
+    ctx.fillText(active ? '✓' : '⚑', sx + 10, sy + 45);
+  } else if (s.type === 'key') {
+    ctx.save();
+    ctx.translate(sx + 15, sy + 15 + bob);
+    // Key glow
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = 10;
+    // Key body
+    ctx.fillStyle = s.color;
+    ctx.beginPath();
+    ctx.arc(0, -4, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // Key hole
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.arc(0, -4, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Key shaft
+    ctx.fillStyle = s.color;
+    ctx.fillRect(-2, 4, 4, 12);
+    // Key teeth
+    ctx.fillRect(2, 10, 4, 3);
+    ctx.fillRect(2, 14, 3, 2);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  } else if (s.type === 'gate') {
+    if (player.collectedKeys.has(s.color)) return;
+    // Colored gate/barrier
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = 0.6 + Math.sin(frameCount * 0.08) * 0.2;
+    ctx.fillRect(sx, sy, s.w, s.h);
+    // Pattern
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(sx + 2, sy + 2, s.w - 4, s.h - 4);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    // Lock icon
+    ctx.fillStyle = 'white';
+    ctx.font = '16px Arial';
+    ctx.fillText('🔒', sx - 2, sy + s.h/2 + 5);
+  } else if (s.type === 'gravity_flip' || s.type === 'gravity_normal') {
+    // Purple pad
+    const isNormal = s.type === 'gravity_normal';
+    ctx.fillStyle = isNormal ? '#40a040' : '#8040c0';
+    ctx.fillRect(sx, sy, 30, 10);
+    // Glow
+    ctx.shadowColor = isNormal ? '#40ff40' : '#a040ff';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = isNormal ? '#60ff60' : '#c060ff';
+    ctx.fillRect(sx + 3, sy + 2, 24, 6);
+    ctx.shadowBlur = 0;
+    // Arrow
+    ctx.fillStyle = 'white';
+    ctx.font = '14px Arial';
+    ctx.fillText(isNormal ? '↓' : '↕', sx + 8, sy - 2);
+  } else if (s.type === 'switch') {
+    const isHit = player.switchesHit.includes(s.id);
+    ctx.fillStyle = isHit ? '#44aa44' : '#aa4444';
+    ctx.fillRect(sx + 5, sy + 10, 20, 20);
+    ctx.fillStyle = isHit ? '#66dd66' : '#dd6666';
+    ctx.fillRect(sx + 7, sy + 12, 16, 16);
+    // Label
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.label, sx + 15, sy + 25);
+    ctx.textAlign = 'left';
+  } else if (s.type === 'switch_door') {
+    // Check if all switches in group are hit in order
+    const allSwitches = specials.filter(sw => sw.type === 'switch' && sw.groupId === s.groupId);
+    const allHit = s.requiredOrder.every(id => player.switchesHit.includes(id));
+    if (allHit) return; // Door open
+
+    ctx.fillStyle = '#886644';
+    ctx.fillRect(sx, sy, s.w, s.h);
+    ctx.strokeStyle = '#664422';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx, sy, s.w, s.h);
+    // Bars
+    for (let by = sy + 10; by < sy + s.h; by += 15) {
+      ctx.fillStyle = '#554433';
+      ctx.fillRect(sx + 3, by, s.w - 6, 3);
+    }
+  } else if (s.type === 'sign') {
+    // Sign post
+    ctx.fillStyle = '#8B7355';
+    ctx.fillRect(sx + 12, sy, 6, 30);
+    ctx.fillStyle = '#C4A86B';
+    ctx.fillRect(sx - 5, sy - 5, 40, 22);
+    ctx.strokeStyle = '#8B7355';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx - 5, sy - 5, 40, 22);
+    ctx.fillStyle = '#333';
+    ctx.font = '10px Arial';
+    ctx.fillText('?', sx + 10, sy + 10);
+  } else if (s.type === 'catapult') {
+    const isMega = s.mega;
+    const armAngle = s.armAngle || 0;
+    const baseW = isMega ? 50 : 36;
+    const baseH = isMega ? 16 : 12;
+
+    // Base/platform
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(sx - baseW/2 + 15, sy + 10, baseW, baseH);
+    ctx.strokeStyle = '#6B4914';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx - baseW/2 + 15, sy + 10, baseW, baseH);
+
+    // Wheels
+    ctx.fillStyle = '#5a4020';
+    ctx.beginPath(); ctx.arc(sx + 4, sy + 24, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx + baseW - 4, sy + 24, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // Arm (rotates when launching)
+    ctx.save();
+    ctx.translate(sx + 15, sy + 12);
+    ctx.rotate((s.angle || -60) * Math.PI / 180 + armAngle);
+    const armLen = isMega ? 40 : 30;
+    ctx.fillStyle = '#A0782A';
+    ctx.fillRect(-3, -armLen, 6, armLen);
+    ctx.strokeStyle = '#6B4914';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-3, -armLen, 6, armLen);
+    // Bucket at the end
+    ctx.fillStyle = '#C89030';
+    ctx.beginPath();
+    ctx.moveTo(-8, -armLen - 2);
+    ctx.lineTo(8, -armLen - 2);
+    ctx.lineTo(6, -armLen + 6);
+    ctx.lineTo(-6, -armLen + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Glow when ready
+    const glowPulse = Math.sin(frameCount * 0.08) * 0.15 + 0.25;
+    ctx.fillStyle = isMega ? `rgba(255, 100, 50, ${glowPulse})` : `rgba(255, 200, 50, ${glowPulse})`;
+    ctx.beginPath();
+    ctx.arc(sx + 15, sy + 10, isMega ? 30 : 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label
+    if (isMega) {
+      ctx.fillStyle = '#ff6633';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('MEGA', sx - 1, sy + 38);
+    }
+  } else if (s.type === 'laser_emitter') {
+    const period = s.period || 90;
+    const onTime = s.onTime || 45;
+    const offset = s.offset || 0;
+    const phase = (frameCount + offset) % period;
+    const isOn = phase < onTime;
+    // Emitter box
+    ctx.fillStyle = '#aa3333';
+    ctx.fillRect(sx + 5, sy, 20, 15);
+    ctx.strokeStyle = '#661111';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx + 5, sy, 20, 15);
+    // Warning light
+    ctx.fillStyle = isOn ? '#ff0000' : '#440000';
+    ctx.beginPath(); ctx.arc(sx + 15, sy + 7, 4, 0, Math.PI * 2); ctx.fill();
+    // Laser beam
+    if (isOn) {
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+      ctx.fillRect(sx + 12, sy + 15, 6, 500);
+      ctx.fillStyle = 'rgba(255, 100, 100, 0.7)';
+      ctx.fillRect(sx + 13, sy + 15, 4, 500);
+      ctx.fillStyle = 'rgba(255, 200, 200, 0.9)';
+      ctx.fillRect(sx + 14, sy + 15, 2, 500);
+    }
+  } else if (s.type === 'portal') {
+    const pulse = Math.sin(frameCount * 0.08 + s.x) * 3;
+    ctx.save();
+    ctx.translate(sx + 15, sy + 15);
+    ctx.shadowColor = s.color || '#ff6600';
+    ctx.shadowBlur = 10 + pulse;
+    for (let i = 0; i < 3; i++) {
+      const rot = frameCount * 0.05 + i * 2.1;
+      const r = 14 - i * 3;
+      ctx.strokeStyle = s.color || '#ff6600';
+      ctx.globalAlpha = 0.8 - i * 0.2;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.7, rot, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+    if (s.label) {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(s.label, 0, 30); ctx.textAlign = 'left';
+    }
+    ctx.restore();
+  } else if (s.type === 'reverse_zone') {
+    const rw = s.w || 200, rh = s.h || 150;
+    const rx = sx + 15 - rw/2, ry = sy + 15 - rh/2;
+    // Pink translucent zone
+    const pulse = Math.sin(frameCount * 0.04) * 0.05 + 0.12;
+    ctx.fillStyle = `rgba(220, 80, 180, ${pulse})`;
+    ctx.fillRect(rx, ry, rw, rh);
+    // Border
+    ctx.strokeStyle = 'rgba(220, 80, 180, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.setLineDash([]);
+    // Mirror arrows
+    ctx.fillStyle = 'rgba(255, 150, 220, 0.4)';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('<< >>', rx + rw/2, ry + rh/2 + 5);
+    ctx.textAlign = 'left';
+  } else if (s.type === 'jump_orb') {
+    // Floating glowing orb that grants double jump
+    const bob = Math.sin(frameCount * 0.07 + s.x) * 4;
+    const pulse = Math.sin(frameCount * 0.1) * 0.2 + 0.8;
+    ctx.save();
+    ctx.translate(sx + 15, sy + 15 + bob);
+    // Outer glow
+    ctx.shadowColor = '#66ffaa';
+    ctx.shadowBlur = 12 * pulse;
+    // Ring
+    ctx.strokeStyle = `rgba(100, 255, 170, ${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner orb
+    ctx.fillStyle = `rgba(130, 255, 200, ${pulse * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 9, 0, Math.PI * 2);
+    ctx.fill();
+    // Core
+    ctx.fillStyle = '#eeffee';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Arrow symbol
+    ctx.fillStyle = '#226644';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('^^', 0, 4);
+    ctx.textAlign = 'left';
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  } else if (s.type === 'hook_point') {
+    // Grapple hook point - ring you can latch onto
+    const pulse = Math.sin(frameCount * 0.06 + s.x) * 3;
+    ctx.save();
+    ctx.translate(sx + 15, sy + 15);
+
+    // Chain/rope from ceiling
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, -200);
+    ctx.lineTo(0, -8);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Ring
+    ctx.strokeStyle = '#ddaa30';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#ffcc00';
+    ctx.shadowBlur = 6 + pulse;
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Inner dot
+    ctx.fillStyle = '#ffdd55';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Draw grapple line if player is attached to this hook
+    if (player.grappling && player.grappleTarget === s) {
+      ctx.strokeStyle = '#ccaa44';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(player.x + player.w/2 - camera.x, player.y + 10 - camera.y);
+      ctx.lineTo(sx + 15, sy + 15);
+      ctx.stroke();
+    }
+  } else if (s.type === 'wind') {
+    // Wind tunnel - animated air streams
+    const ww = s.w || 80;
+    const wh = s.h || 160;
+    const wx = sx - ww/2 + 15;
+    const wy = sy - wh/2 + 15;
+
+    // Faint background
+    ctx.fillStyle = 'rgba(150, 200, 255, 0.06)';
+    ctx.fillRect(wx, wy, ww, wh);
+
+    // Wind lines
+    ctx.strokeStyle = 'rgba(150, 200, 255, 0.3)';
+    ctx.lineWidth = 1.5;
+    const dirX = s.dirX || 0;
+    const dirY = s.dirY || 0;
+
+    for (let i = 0; i < 8; i++) {
+      const seed = s.x * 7 + i * 137;
+      const baseX = wx + (seed % ww);
+      const baseY = wy + ((seed * 3) % wh);
+      // Animate along wind direction
+      const offset = (frameCount * 2 + i * 30) % (ww + wh);
+      let lx = baseX + (dirX > 0 ? 1 : dirX < 0 ? -1 : 0) * (offset % ww);
+      let ly = baseY + (dirY > 0 ? 1 : dirY < 0 ? -1 : 0) * (offset % wh);
+      // Wrap within bounds
+      if (lx > wx + ww) lx -= ww;
+      if (lx < wx) lx += ww;
+      if (ly > wy + wh) ly -= wh;
+      if (ly < wy) ly += wh;
+
+      const len = 12 + Math.sin(frameCount * 0.1 + i) * 4;
+      const angle = Math.atan2(dirY, dirX || 0.001);
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(lx + Math.cos(angle) * len, ly + Math.sin(angle) * len);
+      ctx.stroke();
+
+      // Arrow tip
+      const tipX = lx + Math.cos(angle) * len;
+      const tipY = ly + Math.sin(angle) * len;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - Math.cos(angle - 0.5) * 5, tipY - Math.sin(angle - 0.5) * 5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - Math.cos(angle + 0.5) * 5, tipY - Math.sin(angle + 0.5) * 5);
+      ctx.stroke();
+    }
+
+    // Border glow
+    ctx.strokeStyle = 'rgba(150, 200, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(wx, wy, ww, wh);
+    ctx.setLineDash([]);
+  } else if (s.type === 'timed_button') {
+    // Button you press to open a door for a few seconds
+    const isPressed = s._timer > 0;
+    ctx.fillStyle = isPressed ? '#44cc44' : '#cc4444';
+    ctx.fillRect(sx + 5, sy + 20, 20, 10);
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx + 5, sy + 20, 20, 10);
+    // Button top
+    ctx.fillStyle = isPressed ? '#66ee66' : '#ee6666';
+    ctx.fillRect(sx + 7, sy + (isPressed ? 19 : 16), 16, isPressed ? 4 : 7);
+    // Timer bar
+    if (isPressed) {
+      const pct = s._timer / (s.duration || 120);
+      ctx.fillStyle = '#44cc44';
+      ctx.fillRect(sx + 3, sy + 32, 24 * pct, 3);
+    }
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.font = '8px Orbitron, Arial';
+    ctx.fillText('PUSH', sx + 3, sy + 14);
+  } else if (s.type === 'timed_door') {
+    // Door that opens when its paired button is pressed
+    const btn = specials.find(b => b.type === 'timed_button' && b.doorId === s.doorId);
+    const isOpen = btn && btn._timer > 0;
+    if (!isOpen) {
+      ctx.fillStyle = s.color || '#888844';
+      ctx.globalAlpha = 0.7 + Math.sin(frameCount * 0.06) * 0.15;
+      ctx.fillRect(sx, sy, s.w || 20, s.h || 500);
+      ctx.strokeStyle = '#666622';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx, sy, s.w || 20, s.h || 500);
+      // Timer icon
+      ctx.fillStyle = '#fff';
+      ctx.font = '14px Arial';
+      ctx.fillText('⏱', sx, sy + (s.h || 500)/2);
+      ctx.globalAlpha = 1;
+    }
+  } else if (s.type === 'oneway') {
+    // One-way wall - arrow shows which direction you can pass
+    const ow = s.w || 20, oh = s.h || 80;
+    ctx.fillStyle = 'rgba(100, 180, 255, 0.25)';
+    ctx.fillRect(sx, sy, ow, oh);
+    ctx.strokeStyle = 'rgba(100, 180, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(sx, sy, ow, oh);
+    ctx.setLineDash([]);
+    // Arrow showing pass direction
+    const dir = s.passDir || 'right';
+    ctx.fillStyle = 'rgba(100, 180, 255, 0.6)';
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    const arrow = dir === 'right' ? '>' : '<';
+    for (let ay = sy + 20; ay < sy + oh; ay += 30) {
+      ctx.fillText(arrow, sx + ow/2, ay);
+    }
+    ctx.textAlign = 'left';
+  } else if (s.type === 'magnet') {
+    // Magnet zone - pulls player toward a point
+    const mw = s.w || 100, mh = s.h || 200;
+    const mx = sx + 15 - mw/2, my = sy + 15 - mh/2;
+    const pulse = Math.sin(frameCount * 0.06) * 0.05 + 0.1;
+    ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
+    ctx.fillRect(mx, my, mw, mh);
+    // Magnetic field lines
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+    ctx.lineWidth = 1;
+    const pullDir = s.pullDir || 'right'; // direction it pulls
+    for (let i = 0; i < 5; i++) {
+      const ly = my + 20 + i * (mh - 40) / 4;
+      const offset = (frameCount * 2 + i * 20) % 30;
+      ctx.beginPath();
+      if (pullDir === 'right') {
+        ctx.moveTo(mx + offset, ly);
+        ctx.lineTo(mx + offset + 15, ly);
+        ctx.moveTo(mx + offset + 12, ly - 3);
+        ctx.lineTo(mx + offset + 15, ly);
+        ctx.lineTo(mx + offset + 12, ly + 3);
+      } else if (pullDir === 'left') {
+        ctx.moveTo(mx + mw - offset, ly);
+        ctx.lineTo(mx + mw - offset - 15, ly);
+        ctx.moveTo(mx + mw - offset - 12, ly - 3);
+        ctx.lineTo(mx + mw - offset - 15, ly);
+        ctx.lineTo(mx + mw - offset - 12, ly + 3);
+      } else if (pullDir === 'down') {
+        const lx = mx + 20 + i * (mw - 40) / 4;
+        ctx.moveTo(lx, my + offset);
+        ctx.lineTo(lx, my + offset + 15);
+      }
+      ctx.stroke();
+    }
+    // Magnet icon
+    ctx.fillStyle = 'rgba(255, 80, 80, 0.5)';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('U', mx + mw/2, my + mh/2 + 5);
+    ctx.textAlign = 'left';
+  } else if (s.type === 'finish') {
+    // Finish flag / house
+    ctx.fillStyle = '#d4a040';
+    ctx.fillRect(sx, sy - 20, 40, 55);
+    ctx.fillStyle = '#c08030';
+    // Roof
+    ctx.beginPath();
+    ctx.moveTo(sx - 5, sy - 20);
+    ctx.lineTo(sx + 20, sy - 45);
+    ctx.lineTo(sx + 45, sy - 20);
+    ctx.fill();
+    // Door
+    ctx.fillStyle = '#804020';
+    ctx.fillRect(sx + 14, sy + 10, 14, 25);
+    // Star
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = '20px Arial';
+    ctx.fillText('⭐', sx + 8, sy - 25);
+    // Text
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText('HOME', sx + 2, sy - 48);
+  }
+}
+
+// ============ COLLISION ============
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ============ UPDATE ============
+function update() {
+  if (!gameRunning || !player.alive) return;
+  frameCount++;
+  player.tailWag += 0.15;
+  if (player.gravFlipCooldown > 0) player.gravFlipCooldown--;
+
+  // Idle/sleep tracking
+  const anyKey = keys['ArrowLeft'] || keys['ArrowRight'] || keys['ArrowUp'] || keys['ArrowDown']
+    || keys['a'] || keys['w'] || keys['d'] || keys[' '];
+  if (anyKey || Math.abs(player.vx) > 0.5 || !player.onGround) {
+    idleFrames = 0;
+    if (sleepMode) {
+      sleepMode = false;
+      sleepTimer = 0;
+    }
+  } else {
+    idleFrames++;
+  }
+  if (idleFrames >= SLEEP_THRESHOLD && player.onGround) {
+    sleepMode = true;
+    sleepTimer++;
+    dreamFishX += 0.8;
+    dreamYarnAngle += 0.03;
+  }
+
+  // Dance mode: hold D + arrow keys to dance
+  danceMode = keys['d'] && player.onGround;
+  if (danceMode) {
+    if (keys['ArrowLeft']) dancePose = 1;
+    else if (keys['ArrowRight']) dancePose = 2;
+    else if (keys['ArrowUp']) dancePose = 3;
+    else if (keys['ArrowDown']) dancePose = 4;
+    else dancePose = 0;
+    // Spawn dance particles occasionally
+    if (dancePose > 0 && frameCount % 10 === 0) {
+      spawnParticles(player.x + player.w/2, player.y, '#ffdd44', 2);
+    }
+  } else {
+    dancePose = 0;
+  }
+
+  // Check if player is in a reverse zone
+  let reversed = false;
+  const pcx = player.x + player.w/2, pcy = player.y + player.h/2;
+  for (const s of specials) {
+    if (s.type !== 'reverse_zone') continue;
+    const rw = s.w || 200, rh = s.h || 150;
+    const rx = s.x + 15 - rw/2, ry = s.y + 15 - rh/2;
+    if (pcx > rx && pcx < rx + rw && pcy > ry && pcy < ry + rh) { reversed = true; break; }
+  }
+
+  // Movement (disabled during dance, reduced on ice, reversed in mirror zones)
+  if (!danceMode) {
+    const moveForce = player.onIce ? MOVE_SPEED * 0.06 : MOVE_SPEED * 0.3;
+    const leftKey = reversed ? (keys['ArrowRight']) : (keys['ArrowLeft'] || keys['a']);
+    const rightKey = reversed ? (keys['ArrowLeft'] || keys['a']) : (keys['ArrowRight']);
+    if (leftKey) {
+      player.vx -= moveForce;
+      player.facingRight = false;
+    }
+    if (rightKey) {
+      player.vx += moveForce;
+      player.facingRight = true;
+    }
+  }
+
+  if (player.catapultLaunch) {
+    player.vx *= 0.99;
+    if (Math.abs(player.vx) > 16) player.vx = 16 * Math.sign(player.vx);
+    if (player.onGround) player.catapultLaunch = false;
+  } else if (player.onIce) {
+    player.vx *= 0.995;
+    if (Math.abs(player.vx) > 10) player.vx = 10 * Math.sign(player.vx);
+  } else {
+    player.vx *= FRICTION;
+    if (Math.abs(player.vx) > MOVE_SPEED) player.vx = MOVE_SPEED * Math.sign(player.vx);
+  }
+  if (!player.onIce && Math.abs(player.vx) < 0.1) player.vx = 0;
+
+  // Gravity
+  player.vy += GRAVITY * player.gravityDir;
+  // Only cap downward falling speed, not upward bounce velocity
+  if (player.gravityDir === 1 && player.vy > MAX_FALL) player.vy = MAX_FALL;
+  if (player.gravityDir === -1 && player.vy < -MAX_FALL) player.vy = -MAX_FALL;
+
+  // Jump
+  const jumpKey = keys['ArrowUp'] || keys['w'] || keys[' '];
+  if (jumpKey && player.onGround && !player.grappling) {
+    player.vy = JUMP_FORCE * player.gravityDir;
+    player.onGround = false;
+    player._jumpKeyWasUp = false;
+    spawnParticles(player.x + player.w/2, player.y + (player.gravityDir === 1 ? player.h : 0), '#aaa', 5);
+  }
+  // Double jump: use orb power while in the air
+  if (!jumpKey) player._jumpKeyWasUp = true;
+  if (jumpKey && player._jumpKeyWasUp && !player.onGround && player.hasDoubleJump && !player.grappling) {
+    player.vy = JUMP_FORCE * player.gravityDir * 0.85;
+    player.hasDoubleJump = false;
+    player._jumpKeyWasUp = false;
+    spawnParticles(player.x + player.w/2, player.y + player.h/2, '#66ffaa', 12);
+  }
+
+  // Grapple hook logic
+  if (player.grappling && player.grappleTarget) {
+    const hx = player.grappleTarget.x + 15;
+    const hy = player.grappleTarget.y + 15;
+    const px = player.x + player.w/2;
+    const py = player.y + 10;
+
+    const dx = px - hx;
+    const dy = py - hy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const angle = Math.atan2(dy, dx);
+    player.grappleAngle = angle;
+
+    // Gravity pulls you down while swinging
+    player.vy += GRAVITY * 0.5;
+
+    // LEFT/RIGHT actively swing you
+    if (keys['ArrowLeft'] || keys['a']) player.vx -= 0.6;
+    if (keys['ArrowRight']) player.vx += 0.6;
+
+    // Light air friction on swing
+    player.vx *= 0.98;
+    player.vy *= 0.98;
+
+    // Climb up with UP, extend with DOWN (fast!)
+    if (keys['ArrowUp'] || keys['w']) {
+      player.grappleLen = Math.max(30, player.grappleLen - 4);
+    }
+    if (keys['ArrowDown'] || keys['s']) {
+      player.grappleLen = Math.min(250, player.grappleLen + 4);
+    }
+
+    // Constrain to rope length (pull player toward hook if too far)
+    const ropeLen = player.grappleLen;
+    if (dist > ropeLen) {
+      const nx = dx / dist;
+      const ny = dy / dist;
+      player.x = hx + nx * ropeLen - player.w/2;
+      player.y = hy + ny * ropeLen - 10;
+      // Remove velocity component along rope
+      const dot = player.vx * nx + player.vy * ny;
+      if (dot > 0) {
+        player.vx -= dot * nx;
+        player.vy -= dot * ny;
+      }
+    }
+
+    // Release: SPACE or DOWN when rope is long
+    if (keys[' '] || (player.grappleLen >= 240 && (keys['ArrowDown'] || keys['s']))) {
+      player.lastHook = player.grappleTarget;
+      player.grappling = false;
+      player.grappleTarget = null;
+      // Boost in current direction on release
+      player.vx *= 1.3;
+      player.vy *= 1.3;
+      spawnParticles(px, py, '#ffcc44', 8);
+    }
+  }
+
+  // Auto-grapple: press UP near a hook (works on ground too!)
+  if ((keys['ArrowUp'] || keys['w']) && !player.grappling && player.gravFlipCooldown <= 0) {
+    let closestHook = null;
+    let closestDist = 280; // generous grab range
+    for (const s of specials) {
+      if (s.type !== 'hook_point') continue;
+      if (s === player.lastHook) continue;
+      const dx = (s.x + 15) - (player.x + player.w/2);
+      const dy = (s.y + 15) - (player.y + 10);
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      // Only grab hooks that are above you
+      if (dy < 0 && dist < closestDist) {
+        closestDist = dist;
+        closestHook = s;
+      }
+    }
+    if (closestHook && !player.onGround) {
+      player.lastHook = null;
+      player.grappling = true;
+      player.grappleTarget = closestHook;
+      player.grappleLen = closestDist;
+      player.onGround = false;
+      spawnParticles(player.x + player.w/2, player.y + 10, '#ffcc44', 8);
+    }
+  }
+
+  // Release grapple when landing
+  if (player.onGround) {
+    player.lastHook = null;
+  }
+  if (player.grappling && player.onGround) {
+    player.grappling = false;
+    player.grappleTarget = null;
+  }
+
+  // Wind tunnel effects
+  const playerCX = player.x + player.w/2;
+  const playerCY = player.y + player.h/2;
+  for (const s of specials) {
+    if (s.type !== 'wind') continue;
+    const ww = s.w || 80;
+    const wh = s.h || 160;
+    const wx = s.x + 15 - ww/2;
+    const wy = s.y + 15 - wh/2;
+    // Check if player is inside the wind zone
+    if (playerCX > wx && playerCX < wx + ww && playerCY > wy && playerCY < wy + wh) {
+      player.vx += (s.dirX || 0) * 0.2;
+      player.vy += (s.dirY || 0) * 0.35;
+      // Wind particles
+      if (frameCount % 6 === 0) {
+        spawnParticles(
+          wx + Math.random() * ww,
+          wy + Math.random() * wh,
+          'rgba(180, 220, 255, 0.5)', 1
+        );
+      }
+    }
+  }
+
+  // Update catapult arm animations
+  for (const s of specials) {
+    if (s.type === 'catapult' && s.armAngle > 0) {
+      s.armAngle *= 0.9;
+      if (s.armAngle < 0.01) s.armAngle = 0;
+    }
+  }
+
+  // Update moving platforms
+  for (const p of platforms) {
+    if (p.moving) {
+      if (!p._baseY) p._baseY = p.originalY;
+      if (!p._baseX) p._baseX = p.x;
+      if (p.moveDir === 'y') {
+        p.y = p._baseY + Math.sin(frameCount * 0.02 * (p.moveSpeed || 1)) * (p.moveRange || 30);
+      } else {
+        p.x = p._baseX + Math.sin(frameCount * 0.02 * (p.moveSpeed || 1)) * (p.moveRange || 30);
+      }
+    }
+    // Fake platform falling
+    if (p.type === 'fake' && p.fallTimer > 0) {
+      p.fallTimer--;
+      if (p.fallTimer <= 0) {
+        p.fallen = true;
+      }
+    }
+  }
+
+  // Update moving saws
+  for (const o of obstacles) {
+    if (o.type === 'saw_moving') {
+      if (!o._baseY) o._baseY = o.y;
+      o.y = o._baseY + Math.sin(frameCount * 0.03 + o.phase) * 80;
+    }
+  }
+
+  // Move player X
+  player.x += player.vx;
+
+  // Collide X with platforms
+  for (const p of platforms) {
+    if (p.fallen) continue;
+    if (rectOverlap(player, p)) {
+      if (player.vx > 0) {
+        player.x = p.x - player.w;
+      } else if (player.vx < 0) {
+        player.x = p.x + p.w;
+      }
+      player.vx = 0;
+    }
+  }
+
+  // Move player Y
+  player.y += player.vy;
+  player.onGround = false;
+  player.onIce = false;
+
+  // Collide Y with platforms
+  for (const p of platforms) {
+    if (p.fallen) continue;
+    if (rectOverlap(player, p)) {
+      if (player.gravityDir === 1) {
+        if (player.vy > 0) {
+          player.y = p.y - player.h;
+          player.vy = 0;
+          player.onGround = true;
+          if (p.type === 'ice') player.onIce = true;
+          if (p.type === 'conveyor') player.vx += (p.beltDir || 1) * (p.beltSpeed || 2) * 0.15;
+          if (p.type === 'bounce') {
+            player.vy = JUMP_FORCE * 1.8;
+            player.onGround = false;
+            spawnParticles(player.x + player.w/2, player.y + player.h, '#f0c040', 8);
+          }
+          if (p.type === 'fake' && p.fallTimer < 0) {
+            p.fallTimer = 30; // Starts falling after 0.5 sec
+          }
+        } else if (player.vy < 0) {
+          player.y = p.y + p.h;
+          player.vy = 0;
+        }
+      } else {
+        // Inverted gravity
+        if (player.vy < 0) {
+          player.y = p.y + p.h;
+          player.vy = 0;
+          player.onGround = true;
+          if (p.type === 'bounce') {
+            player.vy = -JUMP_FORCE * 2.2;
+            player.onGround = false;
+          }
+        } else if (player.vy > 0) {
+          player.y = p.y - player.h;
+          player.vy = 0;
+        }
+      }
+    }
+  }
+
+  // Check obstacle collision
+  const playerBox = {x: player.x + 5, y: player.y + 5, w: player.w - 10, h: player.h - 10};
+  for (const o of obstacles) {
+    if (!o.active) continue;
+    let obsBox = {x: o.x, y: o.y, w: o.w, h: o.h};
+    if (o.type === 'spike') {
+      // Smaller hitbox for spikes
+      if (o.dir === 'up') {
+        obsBox = {x: o.x + 4, y: o.y + 5, w: o.w - 8, h: o.h - 5};
+      } else {
+        obsBox = {x: o.x + 4, y: o.y, w: o.w - 8, h: o.h - 5};
+      }
+    }
+    if (rectOverlap(playerBox, obsBox)) {
+      die();
+      return;
+    }
+  }
+
+  // Check laser collision
+  for (const s of specials) {
+    if (s.type !== 'laser_emitter') continue;
+    const period = s.period || 90;
+    const onTime = s.onTime || 45;
+    const offset = s.offset || 0;
+    const phase = (frameCount + offset) % period;
+    if (phase < onTime) {
+      // Laser is on - check if player intersects the beam
+      const beamBox = {x: s.x + 13, y: s.y + 15, w: 4, h: 500};
+      if (rectOverlap(playerBox, beamBox)) {
+        die();
+        return;
+      }
+    }
+  }
+
+  // Check specials
+  for (const s of specials) {
+    if (s.collected || !s.active) continue;
+    const sBox = {x: s.x, y: s.y, w: s.w, h: s.h};
+
+    if (s.type === 'gate') {
+      sBox.w = s.w || 20;
+      sBox.h = s.h || 80;
+      if (!player.collectedKeys.has(s.color) && rectOverlap(playerBox, sBox)) {
+        // Block movement
+        if (player.vx > 0) player.x = s.x - player.w;
+        else if (player.vx < 0) player.x = s.x + sBox.w;
+        player.vx = 0;
+      }
+    } else if (s.type === 'switch_door') {
+      sBox.w = s.w || 20;
+      sBox.h = s.h || 80;
+      const allHit = s.requiredOrder.every(id => player.switchesHit.includes(id));
+      if (!allHit && rectOverlap(playerBox, sBox)) {
+        if (player.vx > 0) player.x = s.x - player.w;
+        else if (player.vx < 0) player.x = s.x + sBox.w;
+        player.vx = 0;
+      }
+    }
+
+    if (!rectOverlap(playerBox, sBox)) continue;
+
+    if (s.type === 'checkpoint') {
+      if (checkpointX !== s.x) {
+        checkpointX = s.x;
+        checkpointY = s.y - player.h + 20;
+        checkpointKeys = new Set(player.collectedKeys);
+        checkpointSwitches = [...player.switchesHit];
+        checkpointGravity = player.gravityDir;
+        spawnParticles(s.x + 15, s.y + 15, '#44ff44', 15);
+        showHint("Checkpoint reached!");
+      }
+    } else if (s.type === 'key') {
+      s.collected = true;
+      player.collectedKeys.add(s.color);
+      spawnParticles(s.x + 15, s.y + 15, s.color, 20);
+      showHint(`Got the ${s.color} key!`);
+    } else if (s.type === 'gravity_flip') {
+      if (player.gravFlipCooldown <= 0) {
+        player.gravityDir *= -1;
+        player.vy = 0;
+        player.gravFlipCooldown = 30;
+        spawnParticles(player.x + player.w/2, player.y + player.h/2, '#a040ff', 12);
+      }
+    } else if (s.type === 'gravity_normal') {
+      if (player.gravityDir !== 1) {
+        player.gravityDir = 1;
+        player.vy = 0;
+        spawnParticles(player.x + player.w/2, player.y + player.h/2, '#40ff40', 12);
+        showHint("Gravity restored!");
+      }
+    } else if (s.type === 'switch') {
+      if (!player.switchesHit.includes(s.id)) {
+        // Check if this is the correct next switch
+        const door = specials.find(d => d.type === 'switch_door' && d.groupId === s.groupId);
+        if (door) {
+          const nextIndex = player.switchesHit.length;
+          if (door.requiredOrder[nextIndex] === s.id) {
+            player.switchesHit.push(s.id);
+            spawnParticles(s.x + 15, s.y + 15, '#44aa44', 10);
+            if (player.switchesHit.length === door.requiredOrder.length) {
+              showHint("Door opened!");
+            } else {
+              showHint(`Switch ${s.label} activated! ${door.requiredOrder.length - player.switchesHit.length} more to go.`);
+            }
+          } else {
+            // Wrong order! Reset
+            player.switchesHit = [];
+            spawnParticles(s.x + 15, s.y + 15, '#ff4444', 15);
+            showHint("Wrong order! Switches reset. Remember: 1, 2, 3!");
+          }
+        }
+      }
+    } else if (s.type === 'jump_orb') {
+      if (!player.hasDoubleJump) {
+        player.hasDoubleJump = true;
+        spawnParticles(s.x + 15, s.y + 15, '#66ffaa', 15);
+        showHint("Double jump! Press UP again in the air!");
+      }
+    } else if (s.type === 'catapult') {
+      if (player.onGround && player.gravFlipCooldown <= 0) {
+        player.vx = s.launchVX || 10;
+        player.vy = s.launchVY || -20;
+        player.onGround = false;
+        player.catapultLaunch = !!s.far;
+        player.gravFlipCooldown = 20; // prevent re-triggering
+        // Launch animation on the catapult arm
+        s.armAngle = 1.2;
+        // Particles
+        spawnParticles(player.x + player.w/2, player.y + player.h, '#ffaa33', 15);
+        spawnParticles(player.x + player.w/2, player.y + player.h, '#ff6633', 10);
+        if (s.mega) {
+          spawnParticles(player.x + player.w/2, player.y + player.h, '#ff3300', 20);
+        }
+      }
+    } else if (s.type === 'portal') {
+      if (player.gravFlipCooldown <= 0) {
+        // Find the paired portal
+        const pair = specials.find(p => p.type === 'portal' && p.pairId === s.pairId && p !== s);
+        if (pair) {
+          player.x = pair.x;
+          player.y = pair.y - player.h + 15;
+          player.gravFlipCooldown = 30;
+          spawnParticles(s.x + 15, s.y + 15, s.color || '#ff6600', 15);
+          spawnParticles(pair.x + 15, pair.y + 15, pair.color || '#ff6600', 15);
+        }
+      }
+    } else if (s.type === 'timed_button') {
+      if (player.onGround) {
+        s._timer = s.duration || 120;
+        spawnParticles(s.x + 15, s.y + 25, '#44cc44', 5);
+      }
+    } else if (s.type === 'timed_door') {
+      const btn = specials.find(b => b.type === 'timed_button' && b.doorId === s.doorId);
+      const isOpen = btn && btn._timer > 0;
+      if (!isOpen) {
+        const dw = s.w || 20, dh = s.h || 500;
+        const doorBox = {x: s.x, y: s.y, w: dw, h: dh};
+        if (rectOverlap(playerBox, doorBox)) {
+          if (player.vx > 0) player.x = s.x - player.w;
+          else if (player.vx < 0) player.x = s.x + dw;
+          player.vx = 0;
+        }
+      }
+    } else if (s.type === 'oneway') {
+      const ow = s.w || 20, oh = s.h || 80;
+      const wallBox = {x: s.x, y: s.y, w: ow, h: oh};
+      if (rectOverlap(playerBox, wallBox)) {
+        const dir = s.passDir || 'right';
+        // Block if going the wrong direction
+        if (dir === 'right' && player.vx < 0) {
+          player.x = s.x + ow;
+          player.vx = 0;
+        } else if (dir === 'left' && player.vx > 0) {
+          player.x = s.x - player.w;
+          player.vx = 0;
+        }
+      }
+    } else if (s.type === 'sign') {
+      showHint(s.message);
+    } else if (s.type === 'finish') {
+      winGame();
+    }
+  }
+
+  // Timed button countdown
+  for (const s of specials) {
+    if (s.type === 'timed_button' && s._timer > 0) s._timer--;
+  }
+
+  // Magnet zone effects
+  for (const s of specials) {
+    if (s.type !== 'magnet') continue;
+    const mw = s.w || 100, mh = s.h || 200;
+    const mx = s.x + 15 - mw/2, my = s.y + 15 - mh/2;
+    const pcx = player.x + player.w/2, pcy = player.y + player.h/2;
+    if (pcx > mx && pcx < mx + mw && pcy > my && pcy < my + mh) {
+      const str = s.strength || 0.4;
+      if (s.pullDir === 'right') player.vx += str;
+      else if (s.pullDir === 'left') player.vx -= str;
+      else if (s.pullDir === 'down') player.vy += str;
+      else if (s.pullDir === 'up') player.vy -= str;
+    }
+  }
+
+  // Countdown timer - die if time runs out
+  const timerS = specials.find(s => s.type === 'countdown_timer');
+  if (timerS) {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const remaining = (timerS.seconds || 45) - elapsed;
+    if (remaining <= 0) {
+      showHint("TIME'S UP!");
+      die();
+      startTime = Date.now(); // reset timer on death
+      return;
+    }
+  }
+
+  // Rising lava
+  const lavaSpec = specials.find(s => s.type === 'rising_lava');
+  if (lavaSpec) {
+    if (!lavaSpec._started) { lavaSpec._started = true; lavaSpec._lavaY = 600; lavaSpec._delay = lavaSpec.startDelay || 120; }
+    if (lavaSpec._delay > 0) { lavaSpec._delay--; }
+    else { lavaSpec._lavaY -= (lavaSpec.speed || 0.3); }
+    // Kill player if they touch lava
+    if (player.y + player.h > lavaSpec._lavaY) { die(); return; }
+  }
+
+  // Fall off screen = death
+  if (player.y > 600 || player.y < -1500) {
+    die();
+  }
+
+  // Hint timer
+  if (hintTimer > 0) hintTimer--;
+
+  // Camera follow
+  const targetCamX = player.x - W / 3;
+  const targetCamY = player.y - H / 2 + 50;
+  camera.x += (targetCamX - camera.x) * 0.1;
+  camera.y += (targetCamY - camera.y) * 0.08;
+  camera.y = Math.max(-1500, Math.min(camera.y, 100));
+  if (camera.x < 0) camera.x = 0;
+
+  // Ice spray particles
+  if (player.onIce && Math.abs(player.vx) > 1.5 && frameCount % 3 === 0) {
+    spawnParticles(
+      player.x + (player.facingRight ? 5 : player.w - 5),
+      player.y + player.h,
+      '#ccddff', 1
+    );
+  }
+
+  updateParticles();
+}
+
+function die() {
+  deaths++;
+  spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ff6644', 25);
+  spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ffaa44', 15);
+  respawn();
+}
+
+function respawn() {
+  player.x = checkpointX;
+  player.y = checkpointY;
+  player.vx = 0;
+  player.vy = 0;
+  player.alive = true;
+  player.gravityDir = checkpointGravity;
+  player.gravFlipCooldown = 0;
+  player.catapultLaunch = false;
+  player.grappling = false;
+  player.grappleTarget = null;
+  player.collectedKeys = new Set(checkpointKeys);
+  player.switchesHit = [...checkpointSwitches];
+
+  // Reset fake platforms
+  for (const p of platforms) {
+    if (p.type === 'fake') {
+      p.fallTimer = -1;
+      p.fallen = false;
+      p.y = p.originalY;
+    }
+  }
+
+  // Reset keys that the player no longer has so they reappear
+  for (const s of specials) {
+    if (s.type === 'key' && s.collected && !player.collectedKeys.has(s.color)) {
+      s.collected = false;
+    }
+  }
+
+  // Reset lava to below the checkpoint so you don't respawn in it
+  const lavaSpec = specials.find(s => s.type === 'rising_lava');
+  if (lavaSpec) {
+    lavaSpec._lavaY = checkpointY + 200;
+    lavaSpec._delay = 90; // give some time before it starts rising again
+  }
+}
+
+function winGame() {
+  gameRunning = false;
+  const totalTime = Math.floor((Date.now() - startTime) / 1000);
+  document.getElementById('win-screen').style.display = 'flex';
+  startWinAnimation(totalTime, deaths);
+}
+
+function getRank(time, deaths) {
+  const score = time + deaths * 15;
+  if (score <= 60) return { rank: 'S', title: 'BAGEL MASTER', color: '#ffdd00', glow: '#fff700', desc: 'Absolutely purrfect!' };
+  if (score <= 120) return { rank: 'A', title: 'SUPER CAT', color: '#44ff44', glow: '#00ff44', desc: 'Amazing run!' };
+  if (score <= 200) return { rank: 'B', title: 'COOL KITTY', color: '#44aaff', glow: '#0088ff', desc: 'Great job!' };
+  if (score <= 300) return { rank: 'C', title: 'GOOD BOY', color: '#cc88ff', glow: '#aa44ff', desc: 'Not bad at all!' };
+  if (score <= 450) return { rank: 'D', title: 'SLEEPY CAT', color: '#ffaa44', glow: '#ff8800', desc: 'You made it though!' };
+  return { rank: 'F', title: 'SCAREDY CAT', color: '#ff4444', glow: '#ff0000', desc: 'But you never gave up!' };
+}
+
+function startWinAnimation(totalTime, totalDeaths) {
+  const wc = document.getElementById('win-canvas');
+  const wx = wc.getContext('2d');
+  const rankInfo = getRank(totalTime, totalDeaths);
+  const mins = Math.floor(totalTime / 60);
+  const secs = totalTime % 60;
+
+  let frame = 0;
+  let confetti = [];
+  let stars = [];
+  let showRank = false;
+  let showStats = false;
+  let showButton = false;
+  let dancePhase = 0;
+
+  // Create confetti
+  for (let i = 0; i < 80; i++) {
+    confetti.push({
+      x: Math.random() * 900,
+      y: -Math.random() * 400 - 50,
+      vx: (Math.random() - 0.5) * 3,
+      vy: Math.random() * 2 + 1,
+      rot: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.15,
+      color: ['#ff4444','#44ff44','#4444ff','#ffff44','#ff44ff','#44ffff','#ff8844','#ff44aa'][Math.floor(Math.random()*8)],
+      w: 6 + Math.random() * 6,
+      h: 4 + Math.random() * 4,
+    });
+  }
+
+  // Create sparkle stars around rank
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    stars.push({
+      angle,
+      dist: 70 + Math.random() * 30,
+      size: 2 + Math.random() * 3,
+      speed: 0.01 + Math.random() * 0.01,
+      twinkleOffset: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function drawDancingCat(cx, cy, f) {
+    wx.save();
+    wx.translate(cx, cy);
+
+    dancePhase += 0.12;
+
+    // Dance: bob up and down, tilt side to side, arms wave
+    const bob = Math.sin(dancePhase * 2) * 8;
+    const tilt = Math.sin(dancePhase) * 0.15;
+    const armWave = Math.sin(dancePhase * 2) * 0.6;
+    const squish = 1 + Math.sin(dancePhase * 2) * 0.08;
+
+    wx.rotate(tilt);
+    wx.scale(1, squish);
+    wx.translate(0, bob);
+
+    // Shadow
+    wx.fillStyle = 'rgba(0,0,0,0.2)';
+    wx.beginPath();
+    wx.ellipse(0, 50, 30, 6, 0, 0, Math.PI * 2);
+    wx.fill();
+
+    // Tail (wagging fast!)
+    wx.save();
+    const tailWag = Math.sin(dancePhase * 3) * 0.5;
+    wx.translate(-22, 18);
+    wx.rotate(-0.5 + tailWag);
+    for (let i = 0; i < 5; i++) {
+      wx.fillStyle = i % 2 === 0 ? '#e8b830' : '#f0d060';
+      wx.fillRect(-28 + i * 7, -5, 7, 12);
+    }
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.strokeRect(-28, -5, 35, 12);
+    wx.restore();
+
+    // Left arm waving
+    wx.save();
+    wx.translate(-20, 4);
+    wx.rotate(-0.8 + armWave);
+    wx.fillStyle = '#e8b830';
+    wx.fillRect(-4, -20, 8, 20);
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.strokeRect(-4, -20, 8, 20);
+    // Paw
+    wx.fillStyle = '#f0d060';
+    wx.beginPath();
+    wx.arc(0, -22, 6, 0, Math.PI * 2);
+    wx.fill();
+    wx.stroke();
+    wx.restore();
+
+    // Right arm waving
+    wx.save();
+    wx.translate(20, 4);
+    wx.rotate(0.8 - armWave);
+    wx.fillStyle = '#e8b830';
+    wx.fillRect(-4, -20, 8, 20);
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.strokeRect(-4, -20, 8, 20);
+    wx.fillStyle = '#f0d060';
+    wx.beginPath();
+    wx.arc(0, -22, 6, 0, Math.PI * 2);
+    wx.fill();
+    wx.stroke();
+    wx.restore();
+
+    // Body
+    wx.fillStyle = '#f0d060';
+    wx.beginPath();
+    wx.ellipse(0, 20, 18, 16, 0, 0, Math.PI * 2);
+    wx.fill();
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 2;
+    wx.stroke();
+
+    // Legs dancing
+    const legKick = Math.sin(dancePhase * 2);
+    // Left leg
+    wx.save();
+    wx.translate(-10, 32);
+    wx.rotate(legKick * 0.3);
+    wx.fillStyle = '#e8b830';
+    wx.fillRect(-5, 0, 10, 14);
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.strokeRect(-5, 0, 10, 14);
+    wx.restore();
+    // Right leg
+    wx.save();
+    wx.translate(10, 32);
+    wx.rotate(-legKick * 0.3);
+    wx.fillStyle = '#e8b830';
+    wx.fillRect(-5, 0, 10, 14);
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.strokeRect(-5, 0, 10, 14);
+    wx.restore();
+
+    // Bagel (bigger for celebration!)
+    wx.fillStyle = '#c87830';
+    wx.beginPath();
+    wx.arc(0, -6, 30, 0, Math.PI * 2);
+    wx.fill();
+    wx.fillStyle = '#d89040';
+    wx.beginPath();
+    wx.arc(0, -6, 24, 0, Math.PI * 2);
+    wx.fill();
+    wx.fillStyle = '#e8c878';
+    wx.beginPath();
+    wx.arc(0, -6, 14, 0, Math.PI * 2);
+    wx.fill();
+    wx.strokeStyle = '#805020';
+    wx.lineWidth = 2.5;
+    wx.beginPath();
+    wx.arc(0, -6, 30, 0, Math.PI * 2);
+    wx.stroke();
+    wx.beginPath();
+    wx.arc(0, -6, 14, 0, Math.PI * 2);
+    wx.stroke();
+
+    // Cat face in hole (happy!)
+    wx.fillStyle = '#e8b830';
+    wx.beginPath();
+    wx.arc(0, -3, 12, 0, Math.PI * 2);
+    wx.fill();
+
+    // Ears
+    wx.fillStyle = '#e8b830';
+    wx.beginPath(); wx.moveTo(-10, -12); wx.lineTo(-6, -24); wx.lineTo(-2, -12); wx.fill();
+    wx.beginPath(); wx.moveTo(2, -12); wx.lineTo(6, -24); wx.lineTo(10, -12); wx.fill();
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.beginPath(); wx.moveTo(-10, -12); wx.lineTo(-6, -24); wx.lineTo(-2, -12); wx.stroke();
+    wx.beginPath(); wx.moveTo(2, -12); wx.lineTo(6, -24); wx.lineTo(10, -12); wx.stroke();
+
+    // Happy eyes (closed, smiling)
+    wx.strokeStyle = '#222';
+    wx.lineWidth = 2;
+    wx.beginPath();
+    wx.arc(-4, -5, 3, Math.PI, 0);
+    wx.stroke();
+    wx.beginPath();
+    wx.arc(4, -5, 3, Math.PI, 0);
+    wx.stroke();
+
+    // Big smile
+    wx.strokeStyle = '#555';
+    wx.lineWidth = 1.5;
+    wx.beginPath();
+    wx.arc(0, -1, 6, 0.2, Math.PI - 0.2);
+    wx.stroke();
+
+    // Blush
+    wx.fillStyle = 'rgba(255, 130, 130, 0.4)';
+    wx.beginPath(); wx.ellipse(-8, 0, 4, 2.5, 0, 0, Math.PI * 2); wx.fill();
+    wx.beginPath(); wx.ellipse(8, 0, 4, 2.5, 0, 0, Math.PI * 2); wx.fill();
+
+    // Nose
+    wx.fillStyle = '#d08080';
+    wx.beginPath(); wx.arc(0, -1, 1.5, 0, Math.PI * 2); wx.fill();
+
+    // Whiskers
+    wx.strokeStyle = '#888';
+    wx.lineWidth = 0.8;
+    wx.beginPath(); wx.moveTo(-8, -2); wx.lineTo(-16, -5); wx.stroke();
+    wx.beginPath(); wx.moveTo(-8, 1); wx.lineTo(-16, 3); wx.stroke();
+    wx.beginPath(); wx.moveTo(8, -2); wx.lineTo(16, -5); wx.stroke();
+    wx.beginPath(); wx.moveTo(8, 1); wx.lineTo(16, 3); wx.stroke();
+
+    wx.restore();
+  }
+
+  function drawWinFrame() {
+    frame++;
+    wx.clearRect(0, 0, 900, 550);
+
+    // Background - gradient that pulses
+    const pulse = Math.sin(frame * 0.02) * 10;
+    const grad = wx.createRadialGradient(450, 250, 50 + pulse, 450, 250, 500);
+    grad.addColorStop(0, '#2a2a5e');
+    grad.addColorStop(0.5, '#1a1a3e');
+    grad.addColorStop(1, '#0a0a1e');
+    wx.fillStyle = grad;
+    wx.fillRect(0, 0, 900, 550);
+
+    // Spotlight effect
+    if (frame > 20) {
+      const spotAlpha = Math.min((frame - 20) / 40, 0.3);
+      const spotGrad = wx.createRadialGradient(450, 320, 10, 450, 320, 200);
+      spotGrad.addColorStop(0, `rgba(255, 220, 100, ${spotAlpha})`);
+      spotGrad.addColorStop(1, 'rgba(255, 220, 100, 0)');
+      wx.fillStyle = spotGrad;
+      wx.fillRect(0, 0, 900, 550);
+    }
+
+    // Confetti
+    for (const c of confetti) {
+      c.x += c.vx;
+      c.y += c.vy;
+      c.rot += c.rotSpeed;
+      c.vy += 0.02;
+      // Wrap around
+      if (c.y > 580) { c.y = -20; c.x = Math.random() * 900; c.vy = Math.random() * 2 + 1; }
+      wx.save();
+      wx.translate(c.x, c.y);
+      wx.rotate(c.rot);
+      wx.fillStyle = c.color;
+      wx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+      wx.restore();
+    }
+
+    // "YOU WIN!" text - slides in from top
+    if (frame > 10) {
+      const textY = Math.min(70, -50 + (frame - 10) * 4);
+      wx.save();
+      wx.textAlign = 'center';
+      wx.font = 'bold 52px Arial';
+      // Text glow
+      wx.shadowColor = '#ffaa00';
+      wx.shadowBlur = 20;
+      wx.fillStyle = '#ffdd44';
+      wx.fillText('YOU WIN!', 450, textY);
+      wx.shadowBlur = 0;
+
+      // Subtitle
+      if (frame > 30) {
+        const subAlpha = Math.min((frame - 30) / 20, 1);
+        wx.globalAlpha = subAlpha;
+        wx.font = '22px Arial';
+        wx.fillStyle = '#cccccc';
+        const levelName = currentLevel === 1 ? 'Bagel Cat made it home!' : `Level ${currentLevel} Complete!`;
+        wx.fillText(levelName, 450, textY + 35);
+        wx.globalAlpha = 1;
+      }
+      wx.restore();
+    }
+
+    // Dancing cat - appears after frame 25
+    if (frame > 25) {
+      const catAlpha = Math.min((frame - 25) / 15, 1);
+      wx.globalAlpha = catAlpha;
+      drawDancingCat(450, 250, frame);
+      wx.globalAlpha = 1;
+    }
+
+    // Rank display - appears at frame 100
+    if (frame > 100 && !showRank) showRank = true;
+    if (showRank) {
+      const rankFrame = frame - 100;
+      const scale = rankFrame < 15 ? rankFrame / 15 * 1.3 : (rankFrame < 25 ? 1.3 - (rankFrame - 15) / 10 * 0.3 : 1);
+
+      wx.save();
+      wx.textAlign = 'center';
+
+      // Rank circle
+      const rcx = 160, rcy = 260;
+      wx.save();
+      wx.translate(rcx, rcy);
+      wx.scale(scale, scale);
+
+      // Spinning stars around rank
+      for (const star of stars) {
+        star.angle += star.speed;
+        const sx = Math.cos(star.angle) * star.dist;
+        const sy = Math.sin(star.angle) * star.dist;
+        const twinkle = Math.sin(frame * 0.1 + star.twinkleOffset) * 0.4 + 0.6;
+        wx.globalAlpha = twinkle;
+        wx.fillStyle = rankInfo.color;
+        // Draw a little star shape
+        wx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+          const r = i % 2 === 0 ? star.size : star.size * 0.4;
+          wx.lineTo(sx + Math.cos(a + frame * 0.02) * r, sy + Math.sin(a + frame * 0.02) * r);
+        }
+        wx.fill();
+        wx.globalAlpha = 1;
+      }
+
+      // Bagel with grade inside!
+      wx.shadowColor = rankInfo.glow;
+      wx.shadowBlur = 25;
+
+      // Outer bagel
+      wx.fillStyle = '#c87830';
+      wx.beginPath();
+      wx.arc(0, 0, 58, 0, Math.PI * 2);
+      wx.fill();
+
+      // Mid bagel (lighter brown)
+      wx.fillStyle = '#d89040';
+      wx.beginPath();
+      wx.arc(0, 0, 48, 0, Math.PI * 2);
+      wx.fill();
+
+      // Bagel texture dots (sesame seeds)
+      wx.fillStyle = '#e8b060';
+      for (let i = 0; i < 10; i++) {
+        const sa = (i / 10) * Math.PI * 2 + frame * 0.005;
+        const sr = 42 + Math.sin(sa * 3) * 4;
+        wx.beginPath();
+        wx.ellipse(Math.cos(sa) * sr, Math.sin(sa) * sr, 3, 2, sa, 0, Math.PI * 2);
+        wx.fill();
+      }
+
+      // Bagel outline
+      wx.strokeStyle = '#805020';
+      wx.lineWidth = 3;
+      wx.beginPath();
+      wx.arc(0, 0, 58, 0, Math.PI * 2);
+      wx.stroke();
+
+      // Bagel hole (dark background for contrast)
+      wx.fillStyle = '#1a1020';
+      wx.beginPath();
+      wx.arc(0, 0, 28, 0, Math.PI * 2);
+      wx.fill();
+      wx.strokeStyle = '#805020';
+      wx.lineWidth = 2.5;
+      wx.beginPath();
+      wx.arc(0, 0, 28, 0, Math.PI * 2);
+      wx.stroke();
+
+      // Grade letter inside the bagel hole
+      wx.shadowBlur = 20;
+      wx.shadowColor = rankInfo.glow;
+      wx.fillStyle = rankInfo.color;
+      wx.font = 'bold 40px Orbitron, Arial';
+      wx.fillText(rankInfo.rank, 0, 14);
+      // Double draw for extra brightness
+      wx.fillText(rankInfo.rank, 0, 14);
+      wx.shadowBlur = 0;
+
+      wx.restore();
+
+      // Rank title
+      if (rankFrame > 20) {
+        const titleAlpha = Math.min((rankFrame - 20) / 15, 1);
+        wx.globalAlpha = titleAlpha;
+        wx.fillStyle = rankInfo.color;
+        wx.font = 'bold 20px Arial';
+        wx.fillText(rankInfo.title, rcx, rcy + 75);
+        wx.font = '16px Arial';
+        wx.fillStyle = '#ccc';
+        wx.fillText(rankInfo.desc, rcx, rcy + 98);
+        wx.globalAlpha = 1;
+      }
+
+      wx.restore();
+    }
+
+    // Stats - appear at frame 140
+    if (frame > 140 && !showStats) showStats = true;
+    if (showStats) {
+      const statFrame = frame - 140;
+      const statAlpha = Math.min(statFrame / 20, 1);
+      wx.save();
+      wx.globalAlpha = statAlpha;
+      wx.textAlign = 'center';
+
+      const sx = 740, sy = 210;
+
+      // Stats box
+      wx.fillStyle = 'rgba(0,0,0,0.5)';
+      wx.beginPath();
+      wx.roundRect(sx - 100, sy - 30, 200, 140, 10);
+      wx.fill();
+      wx.strokeStyle = 'rgba(255,255,255,0.2)';
+      wx.lineWidth = 1;
+      wx.beginPath();
+      wx.roundRect(sx - 100, sy - 30, 200, 140, 10);
+      wx.stroke();
+
+      wx.fillStyle = '#fff';
+      wx.font = 'bold 18px Arial';
+      wx.fillText('STATS', sx, sy);
+
+      wx.font = '16px Arial';
+      wx.fillStyle = '#aaa';
+      wx.fillText(`Time: ${mins}m ${secs.toString().padStart(2, '0')}s`, sx, sy + 35);
+
+      wx.fillStyle = totalDeaths === 0 ? '#44ff44' : totalDeaths <= 5 ? '#ffdd44' : '#ff6644';
+      wx.fillText(`Deaths: ${totalDeaths}`, sx, sy + 60);
+
+      // Score breakdown
+      wx.fillStyle = '#888';
+      wx.font = '12px Arial';
+      wx.fillText(`Score: ${totalTime} + ${totalDeaths}x15 = ${totalTime + totalDeaths * 15}`, sx, sy + 90);
+
+      wx.globalAlpha = 1;
+      wx.restore();
+    }
+
+    // Show buttons after animation
+    if (frame > 180 && !showButton) {
+      showButton = true;
+      document.getElementById('win-buttons').style.display = 'flex';
+      if (currentLevel < MAX_LEVEL) {
+        document.getElementById('next-level-btn').style.display = 'inline-block';
+      } else {
+        document.getElementById('next-level-btn').style.display = 'none';
+      }
+    }
+
+    // Extra celebration particles for S rank
+    if (rankInfo.rank === 'S' && frame > 120 && frame % 8 === 0) {
+      confetti.push({
+        x: 450 + (Math.random() - 0.5) * 100,
+        y: 200,
+        vx: (Math.random() - 0.5) * 5,
+        vy: -Math.random() * 4 - 2,
+        rot: 0,
+        rotSpeed: (Math.random() - 0.5) * 0.2,
+        color: '#ffdd00',
+        w: 4, h: 4,
+      });
+    }
+
+    requestAnimationFrame(drawWinFrame);
+  }
+
+  drawWinFrame();
+}
+
+function showHint(msg) {
+  hintText = msg;
+  hintTimer = 180; // 3 seconds
+}
+
+// ============ DRAW ============
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+
+  // Draw platforms
+  for (const p of platforms) {
+    if (!p.fallen) drawPlatform(p);
+  }
+
+  // Draw obstacles
+  for (const o of obstacles) drawObstacle(o);
+
+  // Draw specials
+  for (const s of specials) drawSpecial(s);
+
+  // Draw rising lava
+  const lavaS = specials.find(s => s.type === 'rising_lava');
+  if (lavaS && lavaS._lavaY !== undefined) {
+    const lavaScreenY = lavaS._lavaY - camera.y;
+    if (lavaScreenY < H) {
+      // Lava glow
+      const glowGrad = ctx.createLinearGradient(0, lavaScreenY - 30, 0, lavaScreenY);
+      glowGrad.addColorStop(0, 'rgba(255, 60, 0, 0)');
+      glowGrad.addColorStop(1, 'rgba(255, 60, 0, 0.3)');
+      ctx.fillStyle = glowGrad;
+      ctx.fillRect(0, lavaScreenY - 30, W, 30);
+      // Lava surface
+      ctx.fillStyle = '#ff4400';
+      ctx.fillRect(0, lavaScreenY, W, H - lavaScreenY + 100);
+      // Bright top edge
+      ctx.fillStyle = '#ff8800';
+      ctx.fillRect(0, lavaScreenY, W, 4);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(0, lavaScreenY, W, 2);
+      // Bubbles
+      for (let bx = 0; bx < W; bx += 60) {
+        const by = lavaScreenY + 5 + Math.sin(frameCount * 0.05 + bx * 0.1) * 3;
+        const br = 2 + Math.sin(frameCount * 0.08 + bx) * 1;
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath(); ctx.arc(bx + 30, by, br, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Draw particles
+  drawParticles();
+
+  // Draw player
+  if (player.alive) {
+    drawBagelCat(player.x - camera.x, player.y - camera.y, player.facingRight, player.tailWag, player.gravityDir);
+    // Sleep Zzz and dream bubble
+    drawSleepAndDream(player.x - camera.x + player.w/2, player.y - camera.y);
+  }
+
+  // Darkness overlay for Shadow Caves (level 6)
+  if (specials.some(s => s.type === 'darkness_mode')) {
+    const px = player.x + player.w/2 - camera.x;
+    const py = player.y + player.h/2 - camera.y;
+    const radius = 120;
+    // Draw darkness with a circular cutout around the player
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    // Cut out circle around player
+    ctx.moveTo(px + radius, py);
+    ctx.arc(px, py, radius, 0, Math.PI * 2, true);
+    ctx.fill();
+    // Soft glow edge
+    const glowGrad = ctx.createRadialGradient(px, py, radius - 20, px, py, radius + 10);
+    glowGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    glowGrad.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(px, py, radius + 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, W, 35);
+
+  // Level indicator
+  ctx.fillStyle = '#e9a040';
+  ctx.font = 'bold 14px Arial';
+  ctx.fillText(`Lv.${currentLevel}`, 10, 23);
+
+  // Keys collected
+  ctx.font = '14px Arial';
+  let kx = 55;
+  ctx.fillStyle = '#fff';
+  ctx.fillText('Keys:', kx, 23);
+  kx += 40;
+  const keyColors = {1:['red','blue','green'], 2:['yellow'], 3:['purple'], 4:['cyan'], 5:['orange'], 6:['pink'], 7:['red','blue','green'], 8:['red'], 9:['blue'], 10:['orange'], 11:['red','blue','green'], 12:[], 13:[]}[currentLevel] || ['red'];
+  for (const color of keyColors) {
+    ctx.fillStyle = player.collectedKeys.has(color) ? color : '#444';
+    ctx.beginPath();
+    ctx.arc(kx + 8, 18, 8, 0, Math.PI * 2);
+    ctx.fill();
+    if (player.collectedKeys.has(color)) {
+      ctx.fillStyle = 'white';
+      ctx.font = '10px Arial';
+      ctx.fillText('✓', kx + 4, 22);
+      ctx.font = '14px Arial';
+    }
+    kx += 25;
+  }
+
+  // Deaths counter
+  ctx.fillStyle = '#e94560';
+  ctx.font = '14px Arial';
+  ctx.fillText(`Deaths: ${deaths}`, W - 100, 23);
+
+  // Time / Countdown timer
+  const timerSpec = specials.find(s => s.type === 'countdown_timer');
+  if (timerSpec) {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const remaining = Math.max(0, (timerSpec.seconds || 45) - elapsed);
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    const urgent = remaining <= 10;
+    ctx.fillStyle = urgent ? (frameCount % 20 < 10 ? '#ff2222' : '#ff8888') : '#ffdd44';
+    ctx.font = urgent ? 'bold 18px Orbitron, Arial' : '16px Orbitron, Arial';
+    ctx.fillText(`${m}:${s.toString().padStart(2,'0')}`, W/2 - 25, 24);
+    // Bar
+    const pct = remaining / (timerSpec.seconds || 45);
+    ctx.fillStyle = urgent ? '#ff2222' : '#ffdd44';
+    ctx.fillRect(W/2 - 60, 28, 120 * pct, 4);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(W/2 - 60, 28, 120, 4);
+  } else if (startTime > 0) {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(`${m}:${s.toString().padStart(2,'0')}`, W/2 - 20, 23);
+  }
+
+  // Hint box
+  if (hintTimer > 0) {
+    const alpha = hintTimer > 30 ? 1 : hintTimer / 30;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.font = '16px Arial';
+    const tw = ctx.measureText(hintText).width;
+    ctx.fillRect(W/2 - tw/2 - 15, H - 55, tw + 30, 35);
+    ctx.fillStyle = '#ffcc00';
+    ctx.textAlign = 'center';
+    ctx.fillText(hintText, W/2, H - 32);
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ============ GAME LOOP ============
+let prevTime = 0;
+
+function gameLoop(now) {
+  if (!prevTime) prevTime = now;
+  const delta = Math.min(now - prevTime, 100);
+  prevTime = now;
+
+  // How many updates this frame to hit ~120 updates/sec
+  const count = Math.round(delta / 8.33) || 1;
+  for (let i = 0; i < count; i++) update();
+
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============ INPUT ============
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+    e.preventDefault();
+  }
+  if (e.key === 'r' || e.key === 'R') {
+    if (gameRunning && !player.alive) respawn();
+  }
+});
+window.addEventListener('keyup', e => {
+  keys[e.key] = false;
+});
+
+// ============ START ============
+function startLevel(lvl) {
+  currentLevel = lvl;
+  document.getElementById('start-screen').style.display = 'none';
+  gameRunning = true;
+  startTime = Date.now();
+  deaths = 0;
+  resetPlayer();
+  buildLevel();
+}
+
+function startGame() {
+  startLevel(1);
+}
+
+function resetGame() {
+  document.getElementById('win-screen').style.display = 'none';
+  document.getElementById('win-buttons').style.display = 'none';
+  document.getElementById('next-level-btn').style.display = 'none';
+  document.getElementById('start-screen').style.display = 'flex';
+}
+
+function nextLevel() {
+  document.getElementById('win-screen').style.display = 'none';
+  document.getElementById('win-buttons').style.display = 'none';
+  document.getElementById('next-level-btn').style.display = 'none';
+  currentLevel++;
+  gameRunning = true;
+  startTime = Date.now();
+  deaths = 0;
+  resetPlayer();
+  buildLevel();
+}
+
+function resetPlayer() {
+  player.x = 100;
+  player.y = 300;
+  player.vx = 0;
+  player.vy = 0;
+  player.alive = true;
+  player.gravityDir = 1;
+  player.collectedKeys = new Set();
+  player.switchesHit = [];
+  player.facingRight = true;
+  checkpointX = 100;
+  checkpointY = 300;
+  checkpointKeys = new Set();
+  checkpointSwitches = [];
+  checkpointGravity = 1;
+  camera.x = 0;
+  camera.y = 0;
+  particles = [];
+  frameCount = 0;
+  idleFrames = 0;
+  sleepMode = false;
+  sleepTimer = 0;
+}
+
+// Initial draw
+buildLevel();
+gameLoop();
+</script>
+</body>
+</html>

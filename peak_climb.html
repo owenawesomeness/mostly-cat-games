@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Peak Climb!</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a1020; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+#wrap { position: relative; }
+canvas { display: block; border: 3px solid #55aaff; border-radius: 8px; }
+#ui {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10; color: white; text-align: center; background: rgba(10,16,32,0.88);
+}
+#ui.hidden { display: none; }
+button { pointer-events: auto; padding: 12px 40px; font-size: 18px; border: none; border-radius: 25px; cursor: pointer; margin: 5px; font-weight: bold; }
+button:hover { transform: scale(1.08); }
+.btn-add { background: linear-gradient(135deg,#44cc88,#66eebb); color: #0a3020; }
+.btn-start { background: linear-gradient(135deg,#55aaff,#77ccff); color: #0a2040; font-size: 22px; padding: 14px 50px; }
+.info { color: #667799; font-size: 13px; margin-top: 10px; line-height: 1.6; }
+h1 { font-size: 48px; color: #55ccff; text-shadow: 3px 3px 0 #1a3366; margin-bottom: 5px; }
+.subtitle { font-size: 16px; color: #88aacc; margin-bottom: 15px; }
+.player-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 10px 0; }
+.player-tag { padding: 6px 14px; border-radius: 15px; font-size: 13px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
+.remove-btn { background: none; border: none; color: rgba(255,255,255,0.5); cursor: pointer; font-size: 16px; padding: 0; margin: 0; pointer-events: auto; }
+.winner-text { font-size: 36px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <h1>Peak Climb!</h1>
+    <p class="subtitle">Race to the top! First to 40 checkpoints wins!</p>
+    <div id="player-list"><span style="color:#666">No players yet</span></div>
+    <div id="menu-buttons">
+      <button class="btn-add" onclick="addPlayer()">+ Add Player</button>
+    </div>
+    <button style="background:linear-gradient(135deg,#e8a040,#f0c060);color:#3a2010;margin-top:12px;padding:10px 30px;font-size:16px;" onclick="window.location.href='cat_freeforall.html'">🐱 Cat Climb!</button>
+    <div class="info" style="margin-top:12px">
+      Platforms: Solid / Bounce / Ice / Crumble / Moving<br>
+      Checkpoints save progress. 2+ players = split screen!
+    </div>
+  </div>
+</div>
+
+<script>
+// Canvas setup - simple, no DPR scaling
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+var CW = Math.min(900, window.innerWidth - 20);
+var CH = Math.min(650, window.innerHeight - 20);
+canvas.width = CW;
+canvas.height = CH;
+canvas.style.width = CW + 'px';
+canvas.style.height = CH + 'px';
+var ui = document.getElementById('ui');
+
+// Constants
+var GRAVITY = 0.45;
+var JUMP_FORCE = -10;
+var MOVE_SPEED = 3.5;
+var FRICTION = 0.88;
+var MAX_FALL = 10;
+var WALL_W = 20;
+var PLAY_W = 500;
+var CHECKPOINT_INTERVAL = 600;
+var WIN_CHECKPOINTS = 40;
+
+// Player presets
+var PRESETS = [
+  { color: '#ff6666', name: 'Red', left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp' },
+  { color: '#6688ff', name: 'Blue', left: 'a', right: 'd', jump: 'w' },
+  { color: '#66dd66', name: 'Green', left: 'j', right: 'l', jump: 'i' },
+  { color: '#dddd44', name: 'Yellow', left: '4', right: '6', jump: '8' },
+  { color: '#dd66dd', name: 'Purple', left: 'v', right: 'n', jump: 'g' },
+  { color: '#ff9944', name: 'Orange', left: 'z', right: 'c', jump: 'x' },
+  { color: '#44dddd', name: 'Cyan', left: 'f', right: 'h', jump: 't' },
+  { color: '#ff66aa', name: 'Pink', left: ',', right: '.', jump: '/' },
+];
+
+// State
+var running = false;
+var frame = 0;
+var keysDown = {};
+var players = [];
+var playerPresets = [];
+var platforms = [];
+var checkpoints = [];
+var particles = [];
+var winner = null;
+var genY = 100;
+var lastGenX = 250;
+var nextCPY = -CHECKPOINT_INTERVAL;
+
+// Level generation
+function genInitial() {
+  platforms = []; checkpoints = [];
+  genY = 100; lastGenX = 250; nextCPY = -CHECKPOINT_INTERVAL;
+  platforms.push({ x: 0, y: 50, w: 9999, h: 25, t: 'g' });
+  platforms.push({ x: 80, y: 0, w: 90, h: 12, t: 's' });
+  platforms.push({ x: 280, y: -45, w: 90, h: 12, t: 's' });
+  platforms.push({ x: 140, y: -95, w: 80, h: 12, t: 's' });
+  platforms.push({ x: 240, y: -145, w: 100, h: 12, t: 's' });
+  genY = -185;
+}
+
+function genMore(targetY) {
+  while (genY > targetY) {
+    var gap = 45 + Math.random() * 30;
+    genY -= gap;
+    var pw = 50 + Math.random() * 40;
+    var ms = Math.max(40, 110 - gap * 0.7);
+    var px = lastGenX + (Math.random() - 0.5) * 2 * ms;
+    px = Math.max(WALL_W + 5, Math.min(PLAY_W - WALL_W - pw - 5, px));
+    var h = Math.abs(genY);
+    var t = 's';
+    if (h > 2000 && Math.random() < 0.12) t = 'b';
+    if (h > 4000 && Math.random() < 0.1) t = 'i';
+    if (h > 6000 && Math.random() < 0.1) t = 'c';
+    if (h > 8000 && Math.random() < 0.08) t = 'm';
+    var p = { x: px, y: genY, w: pw, h: 12, t: t };
+    if (t === 'm') { p.ox = px; p.spd = 0.5 + Math.random(); p.rng = 30 + Math.random() * 50; p.ph = Math.random() * 6.28; }
+    if (t === 'c') { p.tmr = -1; p.dead = false; }
+    platforms.push(p);
+    lastGenX = px;
+    if (genY <= nextCPY) {
+      checkpoints.push({ x: px + pw / 2, y: genY - 25, who: [], py: genY });
+      nextCPY -= CHECKPOINT_INTERVAL;
+    }
+  }
+  // Cleanup
+  var lo = 200;
+  for (var i = 0; i < players.length; i++) { if (players[i].cpy > lo) lo = players[i].cpy; }
+  platforms = platforms.filter(function(p) { return p.y < lo + 1500 || p.t === 'g'; });
+  checkpoints = checkpoints.filter(function(c) { return c.y < lo + 1500; });
+}
+
+// Player
+function makePlayer(pr, idx) {
+  return {
+    x: 80 + idx * 50, y: 24, w: 22, h: 26,
+    vx: 0, vy: 0, gnd: false,
+    color: pr.color, name: pr.name,
+    kl: pr.left, kr: pr.right, kj: pr.jump,
+    cpx: 250, cpy: 50, cpHit: 0,
+    done: false, respawn: 0, camY: 0,
+    tail: Math.random() * 6, rf: 0, fr: true, blink: 0, jh: false
+  };
+}
+
+function updatePlayer(p) {
+  if (p.done) return;
+  if (p.respawn > 0) { p.respawn--; if (p.respawn <= 0) { p.x = p.cpx - p.w / 2; p.y = p.cpy - p.h; p.vx = 0; p.vy = 0; } return; }
+  p.tail += 0.15;
+  if (p.blink > 0) p.blink--;
+  if (Math.random() < 0.005) p.blink = 8;
+  if (keysDown[p.kl]) { p.vx -= MOVE_SPEED * 0.25; p.fr = false; }
+  if (keysDown[p.kr]) { p.vx += MOVE_SPEED * 0.25; p.fr = true; }
+  if (keysDown[p.kj] && p.gnd && !p.jh) { p.vy = JUMP_FORCE; p.gnd = false; p.jh = true; addParts(p.x + p.w/2, p.y + p.h, p.color, 4); }
+  if (!keysDown[p.kj]) p.jh = false;
+  p.vx *= FRICTION;
+  if (Math.abs(p.vx) > MOVE_SPEED) p.vx = MOVE_SPEED * (p.vx > 0 ? 1 : -1);
+  p.vy += GRAVITY;
+  if (p.vy > MAX_FALL) p.vy = MAX_FALL;
+  p.x += p.vx; p.y += p.vy;
+  if (p.x < WALL_W) { p.x = WALL_W; p.vx = 0; }
+  if (p.x + p.w > PLAY_W - WALL_W) { p.x = PLAY_W - WALL_W - p.w; p.vx = 0; }
+  p.gnd = false;
+  for (var i = 0; i < platforms.length; i++) {
+    var pl = platforms[i];
+    if (pl.t === 'c' && pl.dead) continue;
+    if (p.x + p.w > pl.x && p.x < pl.x + pl.w && p.vy >= 0 && p.y + p.h >= pl.y && p.y + p.h <= pl.y + pl.h + p.vy + 2) {
+      p.y = pl.y - p.h; p.gnd = true;
+      if (pl.t === 'b') { p.vy = JUMP_FORCE * 1.5; p.gnd = false; addParts(p.x+p.w/2,p.y+p.h,'#44ffaa',6); }
+      else if (pl.t === 'i') { p.vy = 0; p.vx *= 0.99; }
+      else if (pl.t === 'c') { p.vy = 0; if (pl.tmr < 0) pl.tmr = 30; }
+      else if (pl.t === 'm') { p.vy = 0; var nx = pl.ox + Math.sin(frame*0.03*pl.spd+pl.ph)*pl.rng; p.x += nx - pl.x; }
+      else p.vy = 0;
+    }
+  }
+  for (var i = 0; i < checkpoints.length; i++) {
+    var cp = checkpoints[i];
+    if (Math.abs(p.x+p.w/2-cp.x)+Math.abs(p.y+p.h/2-cp.y) < 40 && cp.who.indexOf(p.name) < 0) {
+      cp.who.push(p.name); p.cpx = cp.x; p.cpy = cp.py; p.cpHit++;
+      addParts(cp.x, cp.y, p.color, 8);
+      if (p.cpHit >= WIN_CHECKPOINTS && !winner) { winner = p; p.done = true; running = false; setTimeout(showWin, 500); }
+    }
+  }
+  if (p.y > p.cpy + 500) { p.respawn = 30; addParts(p.x+p.w/2,p.y+p.h/2,p.color,10); }
+  if (p.gnd && Math.abs(p.vx) > 0.3) p.rf += Math.abs(p.vx) * 0.15;
+  var ty = p.y - CH * 0.4;
+  p.camY += (ty - p.camY) * 0.08;
+  if (p.camY > 0) p.camY = 0;
+}
+
+function updatePlats() {
+  for (var i = 0; i < platforms.length; i++) {
+    var p = platforms[i];
+    if (p.t === 'm') p.x = p.ox + Math.sin(frame*0.03*p.spd+p.ph)*p.rng;
+    if (p.t === 'c' && p.tmr > 0) { p.tmr--; if (p.tmr <= 0) { p.dead = true; setTimeout((function(pp){return function(){pp.dead=false;pp.tmr=-1;}})(p), 3000); } }
+  }
+}
+
+// Particles
+function addParts(x, y, col, n) { for (var i=0;i<n;i++) particles.push({x:x,y:y,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5-1,life:20+Math.random()*15,ml:35,c:col,s:2+Math.random()*2}); }
+function updateParts() { for (var i=particles.length-1;i>=0;i--) { var p=particles[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life--; if(p.life<=0)particles.splice(i,1); } }
+
+// Drawing a viewport
+function drawView(player, vx, vy, vw, vh) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
+  ctx.translate(vx, vy);
+  var cy = player.camY;
+  var sc = vw / PLAY_W;
+
+  // Background
+  var hpct = Math.min(1, Math.abs(cy) / 30000);
+  ctx.fillStyle = 'rgb(' + (15+Math.floor(hpct*50)) + ',' + (12+Math.floor(hpct*25)) + ',' + (40+Math.floor(hpct*70)) + ')';
+  ctx.fillRect(0, 0, vw, vh);
+
+  // Stars
+  for (var i = 0; i < 25; i++) {
+    var sx = (i*47+13) % vw;
+    var sy = ((i*31+7+cy*0.02*(i%3+1)) % vh + vh) % vh;
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.15+hpct*0.4) + ')';
+    ctx.beginPath(); ctx.arc(sx, sy, 0.8, 0, 6.28); ctx.fill();
+  }
+
+  // Walls
+  ctx.fillStyle = '#222244';
+  ctx.fillRect(0, 0, WALL_W * sc, vh);
+  ctx.fillRect(vw - WALL_W * sc, 0, WALL_W * sc, vh);
+
+  // Platforms
+  for (var i = 0; i < platforms.length; i++) {
+    var p = platforms[i];
+    if (p.t === 'c' && p.dead) continue;
+    var py = p.y - cy;
+    if (py > vh + 20 || py < -20) continue;
+    var px = p.x * sc;
+    var pw = p.w * sc;
+    var shake = (p.t === 'c' && p.tmr > 0) ? (Math.random()-.5)*3 : 0;
+    ctx.fillStyle = p.t==='g'?'#556644':p.t==='b'?'#33aa66':p.t==='i'?'#66bbdd':p.t==='c'?'#886633':p.t==='m'?'#6655aa':'#4a4a6a';
+    ctx.fillRect(px+shake, py, pw, p.h);
+    ctx.fillStyle = p.t==='g'?'#667755':p.t==='b'?'#44dd88':p.t==='i'?'#88ddff':p.t==='c'?(p.tmr>0?'#dd8844':'#aa8855'):p.t==='m'?'#8877cc':'#6a6a8a';
+    ctx.fillRect(px+shake, py, pw, 4);
+  }
+
+  // Checkpoints
+  for (var i = 0; i < checkpoints.length; i++) {
+    var cp = checkpoints[i];
+    var cpy = cp.y - cy;
+    if (cpy > vh + 30 || cpy < -30) continue;
+    var cpx = cp.x * sc;
+    var act = cp.who.indexOf(player.name) >= 0;
+    ctx.fillStyle = act ? '#ffaa33' : '#555566';
+    ctx.fillRect(cpx - 2, cpy, 4, 25);
+    ctx.fillStyle = act ? '#ff6644' : '#444455';
+    ctx.beginPath(); ctx.moveTo(cpx+2,cpy); ctx.lineTo(cpx+14,cpy+6); ctx.lineTo(cpx+2,cpy+12); ctx.fill();
+  }
+
+  // Particles
+  for (var i = 0; i < particles.length; i++) {
+    var pt = particles[i];
+    var ppy = pt.y - cy;
+    if (ppy < -20 || ppy > vh + 20) continue;
+    ctx.globalAlpha = pt.life / pt.ml;
+    ctx.fillStyle = pt.c;
+    ctx.beginPath(); ctx.arc(pt.x * sc, ppy, pt.s * (pt.life/pt.ml), 0, 6.28); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Players
+  for (var pi = 0; pi < players.length; pi++) {
+    var p = players[pi];
+    if (p.respawn > 0) {
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.cpx * sc, p.cpy - cy - p.h/2, 8, 0, 6.28); ctx.fill();
+      ctx.globalAlpha = 1;
+      continue;
+    }
+    var ppx = p.x * sc, ppy = p.y - cy;
+    if (ppy > vh + 40 || ppy < -40) continue;
+    var psw = p.w * sc;
+
+    ctx.save();
+    ctx.translate(ppx + psw/2, ppy + p.h/2);
+    if (!p.fr) ctx.scale(-1, 1);
+    var bob = (p.gnd && Math.abs(p.vx) > 0.3) ? Math.sin(p.rf*0.4)*1.5 : 0;
+    ctx.translate(0, bob);
+
+    // Body
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.ellipse(0, 3, 9, 8, 0, 0, 6.28); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.ellipse(0, -5, 9, 8, 0, 0, 6.28); ctx.fill();
+    // Ears
+    ctx.beginPath(); ctx.moveTo(-7,-9); ctx.lineTo(-5,-16); ctx.lineTo(-1,-9); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(1,-9); ctx.lineTo(5,-16); ctx.lineTo(7,-9); ctx.fill();
+    ctx.fillStyle = '#ffaaaa';
+    ctx.beginPath(); ctx.moveTo(-5,-10); ctx.lineTo(-5,-14); ctx.lineTo(-2,-10); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(2,-10); ctx.lineTo(5,-14); ctx.lineTo(5,-10); ctx.fill();
+    // Eyes
+    if (p.blink > 0) {
+      ctx.strokeStyle='#222'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(-3,-5,2,0.3,2.84); ctx.stroke();
+      ctx.beginPath(); ctx.arc(3,-5,2,0.3,2.84); ctx.stroke();
+    } else {
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(-3,-5,2.5,0,6.28); ctx.fill();
+      ctx.beginPath(); ctx.arc(3,-5,2.5,0,6.28); ctx.fill();
+      ctx.fillStyle='#111';
+      ctx.beginPath(); ctx.arc(-2.5,-5,1.2,0,6.28); ctx.fill();
+      ctx.beginPath(); ctx.arc(3.5,-5,1.2,0,6.28); ctx.fill();
+    }
+    // Nose
+    ctx.fillStyle='#ee8888';
+    ctx.beginPath(); ctx.arc(0,-2,1,0,6.28); ctx.fill();
+    // Tail
+    ctx.save();
+    ctx.translate(-8, 2); ctx.rotate(-0.5 + Math.sin(p.tail)*0.4);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-6,-8,-4,-14); ctx.quadraticCurveTo(-1,-16,1,-12); ctx.quadraticCurveTo(2,-6,1,0); ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+
+    // Name
+    ctx.fillStyle = p.color; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+    ctx.fillText(p.name, ppx + psw/2, ppy - 8);
+    ctx.textAlign = 'left';
+  }
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, vw, 20);
+  ctx.fillStyle = player.color; ctx.font = 'bold 10px Arial';
+  ctx.fillText(player.name, 4, 14);
+  ctx.fillStyle = '#ffcc44'; ctx.font = '10px Arial';
+  ctx.fillText(player.cpHit + '/' + WIN_CHECKPOINTS, vw - 38, 14);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(50, 6, vw - 96, 8);
+  ctx.fillStyle = player.color;
+  ctx.fillRect(50, 6, (vw - 96) * Math.min(1, player.cpHit / WIN_CHECKPOINTS), 8);
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.fillStyle = '#0a1020';
+  ctx.fillRect(0, 0, CW, CH);
+  if (players.length === 0) return;
+  if (players.length === 1) {
+    drawView(players[0], 0, 0, CW, CH);
+  } else if (players.length === 2) {
+    var hw = Math.floor(CW/2) - 1;
+    drawView(players[0], 0, 0, hw, CH);
+    drawView(players[1], hw+2, 0, hw, CH);
+    ctx.fillStyle = '#334455'; ctx.fillRect(hw, 0, 2, CH);
+  } else {
+    var hw = Math.floor(CW/2)-1, hh = Math.floor(CH/2)-1;
+    for (var i = 0; i < players.length && i < 4; i++) {
+      drawView(players[i], (i%2)*(hw+2), Math.floor(i/2)*(hh+2), hw, hh);
+    }
+    ctx.fillStyle = '#334455';
+    ctx.fillRect(hw, 0, 2, CH);
+    if (players.length > 2) ctx.fillRect(0, hh, CW, 2);
+  }
+}
+
+// Screens
+function showWin() {
+  ui.innerHTML = '<div class="winner-text" style="color:' + winner.color + '">' + winner.name + ' wins!</div>' +
+    '<p class="subtitle">' + WIN_CHECKPOINTS + ' checkpoints reached!</p>' +
+    '<button class="btn-start" onclick="showMenu()">Play Again</button>';
+  ui.classList.remove('hidden');
+}
+
+function showMenu() {
+  running = false; winner = null; playerPresets = [];
+  ui.innerHTML = '<h1>Peak Climb!</h1>' +
+    '<p class="subtitle">Race to the top! First to 40 checkpoints wins!</p>' +
+    '<div id="player-list"><span style="color:#666">No players yet</span></div>' +
+    '<div id="menu-buttons"><button class="btn-add" onclick="addPlayer()">+ Add Player</button></div>' +
+    '<div class="info" style="margin-top:12px">Platforms: Solid / Bounce / Ice / Crumble / Moving<br>Checkpoints save progress. 2+ players = split screen!</div>';
+  ui.classList.remove('hidden');
+}
+
+function addPlayer() {
+  if (playerPresets.length >= PRESETS.length) return;
+  playerPresets.push(PRESETS[playerPresets.length]);
+  refreshList();
+}
+
+function removePlayer(idx) {
+  playerPresets.splice(idx, 1);
+  refreshList();
+}
+
+function refreshList() {
+  var list = document.getElementById('player-list');
+  var btns = document.getElementById('menu-buttons');
+  if (!list || !btns) return;
+  var html = '';
+  for (var i = 0; i < playerPresets.length; i++) {
+    var p = playerPresets[i];
+    html += '<div class="player-tag" style="background:' + p.color + '33;border:2px solid ' + p.color + '">' +
+      '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + p.color + '"></span> ' +
+      p.name + ' <span style="font-size:11px;color:#aaa">(' + p.left + '/' + p.right + '/' + p.jump + ')</span>' +
+      ' <button class="remove-btn" onclick="removePlayer(' + i + ')">x</button></div>';
+  }
+  list.innerHTML = html || '<span style="color:#666">No players yet</span>';
+  var b = '';
+  if (playerPresets.length < PRESETS.length) b += '<button class="btn-add" onclick="addPlayer()">+ Add Player</button> ';
+  if (playerPresets.length >= 1) b += '<button class="btn-start" onclick="startGame()">Start Climbing!</button>';
+  btns.innerHTML = b;
+}
+
+function startGame() {
+  ui.classList.add('hidden');
+  genInitial();
+  players = [];
+  for (var i = 0; i < playerPresets.length; i++) players.push(makePlayer(playerPresets[i], i));
+  frame = 0; particles = []; winner = null; running = true;
+}
+
+// Main loop
+function update() {
+  if (!running) return;
+  frame++;
+  var hi = 0;
+  for (var i = 0; i < players.length; i++) { if (players[i].y < hi) hi = players[i].y; }
+  genMore(hi - CH);
+  for (var i = 0; i < players.length; i++) updatePlayer(players[i]);
+  updatePlats();
+  updateParts();
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+// Input
+window.addEventListener('keydown', function(e) {
+  keysDown[e.key] = true;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === ' ') e.preventDefault();
+});
+window.addEventListener('keyup', function(e) { keysDown[e.key] = false; });
+
+genInitial();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

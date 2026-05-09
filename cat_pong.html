@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cat Pong!</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1028;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif}
+canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+var c = document.getElementById('c');
+var ctx = c.getContext('2d');
+var W = Math.min(800, window.innerWidth - 20);
+var H = Math.min(500, window.innerHeight - 20);
+c.width = W; c.height = H;
+
+// Game state
+var state = 'menu'; // menu, cpuselect, play, win
+var p1Score = 0, p2Score = 0;
+var winScore = 5;
+var frame = 0;
+var gameMode = '2p'; // '1p' or '2p'
+var cpuLevel = 5; // 1-9
+
+// Ball
+var ball = {x: W/2, y: H/2, vx: 4, vy: 2, r: 14, trail: []};
+
+// Cats (paddles) - bigger!
+var catW = 70, catH = 90;
+var cat1 = {x: 25, y: H/2 - catH/2, w: catW, h: catH, vy: 0, score: 0, bonk: 0, blink: 0, facing: 1};
+var cat2 = {x: W - 25 - catW, y: H/2 - catH/2, w: catW, h: catH, vy: 0, score: 0, bonk: 0, blink: 0, facing: -1};
+
+var keys = {};
+var particles = [];
+
+function resetBall(dir) {
+  ball.x = W/2; ball.y = H/2;
+  ball.vx = 4 * dir;
+  ball.vy = (Math.random() - 0.5) * 4;
+  ball.trail = [];
+}
+
+function addParticles(x, y, col, n) {
+  for (var i = 0; i < n; i++) {
+    particles.push({x:x,y:y,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,life:20+Math.random()*15,ml:35,c:col,s:2+Math.random()*3});
+  }
+}
+
+// Helper: draw eyes, nose, mouth, whiskers shared between breeds
+function drawFace(cat, eyeColor, noseColor, isRagdoll) {
+  var ww = Math.sin(frame * 0.06) * 0.7;
+  // Eyes
+  if (cat.blink > 0) {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(-5, -16, 4, 0.3, Math.PI-0.3); ctx.stroke();
+    ctx.beginPath(); ctx.arc(9, -16, 4, 0.3, Math.PI-0.3); ctx.stroke();
+  } else {
+    // Eye whites
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-5, -17, 5.5, 5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(9, -17, 5.5, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Iris
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath(); ctx.ellipse(-4, -17, 4, 4.5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, -17, 4, 4.5, 0, 0, Math.PI*2); ctx.fill();
+    // Slit pupil
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(-4, -17, 1.5, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, -17, 1.5, 4, 0, 0, Math.PI*2); ctx.fill();
+    // Shine
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-3, -19, 1.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(11, -19, 1.8, 0, Math.PI*2); ctx.fill();
+    // Lower shine
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.arc(-5, -15, 1, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(9, -15, 1, 0, Math.PI*2); ctx.fill();
+  }
+  // Nose
+  ctx.fillStyle = noseColor;
+  ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(-1, -7.5); ctx.lineTo(5, -7.5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.arc(1.5, -9, 1, 0, Math.PI*2); ctx.fill();
+  // Mouth
+  if (cat.bonk > 0) {
+    ctx.fillStyle = '#cc3344';
+    ctx.beginPath(); ctx.ellipse(2, -4, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ee6677';
+    ctx.beginPath(); ctx.ellipse(2, -3, 3, 2, 0, 0, Math.PI*2); ctx.fill();
+    // Teeth
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(1, -4.5); ctx.lineTo(2, -6); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(3, -4.5); ctx.lineTo(4, -6); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(2, -7.5); ctx.quadraticCurveTo(-2, -4, -4, -5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -7.5); ctx.quadraticCurveTo(6, -4, 8, -5); ctx.stroke();
+  }
+  // Whiskers
+  ctx.strokeStyle = isRagdoll ? 'rgba(220,210,200,0.5)' : 'rgba(200,200,200,0.6)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(-10,-10); ctx.quadraticCurveTo(-20,-14+ww,-30,-12+ww); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-10,-8); ctx.quadraticCurveTo(-20,-7+ww,-30,-5+ww); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-10,-6); ctx.quadraticCurveTo(-20,-2+ww,-28, 1+ww); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14,-10); ctx.quadraticCurveTo(24,-14-ww,34,-12-ww); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14,-8); ctx.quadraticCurveTo(24,-7-ww,34,-5-ww); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14,-6); ctx.quadraticCurveTo(24,-2-ww,32, 1-ww); ctx.stroke();
+  // Blush
+  ctx.fillStyle = 'rgba(255,130,130,0.2)';
+  ctx.beginPath(); ctx.ellipse(-10,-7,5,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(14,-7,5,3,0,0,Math.PI*2); ctx.fill();
+}
+
+// Helper: draw bonking paw
+function drawBonkPaw(cat, color, lightColor) {
+  ctx.save();
+  ctx.translate(16, 5);
+  if (cat.bonk > 0) ctx.rotate(Math.sin(cat.bonk/8*Math.PI)*1.0);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(0, 5, 5, 10, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = lightColor;
+  ctx.beginPath(); ctx.ellipse(0, 14, 7, 5, 0, 0, Math.PI*2); ctx.fill();
+  // Toe beans!
+  ctx.fillStyle = '#e8a0a0';
+  ctx.beginPath(); ctx.arc(-2.5, 12, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(2.5, 12, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 15, 2.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-1, 9, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(1, 9, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ========== ORANGE TABBY ==========
+function drawTabby(cat) {
+  var cx = cat.x + cat.w/2, cy = cat.y + cat.h/2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1); // face left (right side)
+  var bonkOff = cat.bonk > 0 ? Math.sin(cat.bonk/8*Math.PI)*16 : 0;
+  ctx.translate(bonkOff, 0);
+
+  // Tail - fluffy orange with dark stripes
+  ctx.save();
+  ctx.translate(-22, -8);
+  ctx.rotate(-0.5 + Math.sin(frame*0.07)*0.35);
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-16,-20,-10,-35); ctx.quadraticCurveTo(-4,-40,0,-30); ctx.quadraticCurveTo(4,-16,2,0); ctx.fill();
+  ctx.strokeStyle = '#c07020'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-4,-10); ctx.lineTo(-8,-18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6,-20); ctx.lineTo(-10,-28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-3,-28); ctx.lineTo(-6,-33); ctx.stroke();
+  ctx.restore();
+
+  // Back legs
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.ellipse(-12,24,6,12,0.1,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8,24,6,12,-.1,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#f5ddb0';
+  ctx.beginPath(); ctx.ellipse(-12,34,6,4,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8,34,6,4,0,0,Math.PI*2); ctx.fill();
+
+  // Body - round fluffy
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.ellipse(0,12,22,20,0,0,Math.PI*2); ctx.fill();
+  // Belly
+  ctx.fillStyle = '#f5ddb0';
+  ctx.beginPath(); ctx.ellipse(2,17,14,12,0,0,Math.PI*2); ctx.fill();
+  // Tabby stripes on body
+  ctx.strokeStyle = '#c07020'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-12,2); ctx.quadraticCurveTo(-6,8,-4,12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-2); ctx.quadraticCurveTo(0,5,0,10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(12,2); ctx.quadraticCurveTo(6,8,4,12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-16,10); ctx.quadraticCurveTo(-10,15,-8,18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(16,10); ctx.quadraticCurveTo(10,15,8,18); ctx.stroke();
+
+  // Front legs
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.ellipse(6,22,5,11,-0.15,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#f5ddb0';
+  ctx.beginPath(); ctx.ellipse(6,32,5.5,3.5,0,0,Math.PI*2); ctx.fill();
+
+  // Bonking paw
+  drawBonkPaw(cat, '#e8a040', '#f5ddb0');
+
+  // Head - big round
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.ellipse(2,-12,22,20,0,0,Math.PI*2); ctx.fill();
+  // Tabby M marking on forehead
+  ctx.strokeStyle = '#c07020'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-8,-24); ctx.quadraticCurveTo(-4,-28,0,-24); ctx.quadraticCurveTo(4,-28,8,-24); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6,-22); ctx.lineTo(-10,-16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(10,-22); ctx.lineTo(14,-16); ctx.stroke();
+
+  // Cheek fluff
+  ctx.fillStyle = '#f5ddb0';
+  ctx.beginPath(); ctx.ellipse(-14,-5,8,7,-0.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18,-5,8,7,0.2,0,Math.PI*2); ctx.fill();
+
+  // Ears - big triangular with inner pink
+  ctx.fillStyle = '#e8a040';
+  ctx.beginPath(); ctx.moveTo(-14,-24); ctx.lineTo(-10,-40); ctx.lineTo(-2,-23); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(6,-24); ctx.lineTo(14,-40); ctx.lineTo(18,-23); ctx.fill();
+  ctx.fillStyle = '#f0a0a0';
+  ctx.beginPath(); ctx.moveTo(-12,-25); ctx.lineTo(-10,-36); ctx.lineTo(-5,-24); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(8,-25); ctx.lineTo(14,-36); ctx.lineTo(16,-24); ctx.fill();
+  // Ear fur tufts
+  ctx.fillStyle = '#f5ddb0';
+  ctx.beginPath(); ctx.ellipse(-10,-25,3,2,0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(14,-25,3,2,-0.3,0,Math.PI*2); ctx.fill();
+
+  drawFace(cat, '#55bb55', '#e88888', false);
+  ctx.restore();
+}
+
+// ========== RAGDOLL ==========
+function drawRagdoll(cat) {
+  var cx = cat.x + cat.w/2, cy = cat.y + cat.h/2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  var bonkOff = cat.bonk > 0 ? Math.sin(cat.bonk/8*Math.PI)*16 : 0;
+  ctx.translate(bonkOff, 0);
+
+  // === TAIL - long, luxuriously fluffy, cream with dark chocolate tip ===
+  ctx.save();
+  ctx.translate(-24, -6);
+  var tailSwing = Math.sin(frame*0.06)*0.35;
+  ctx.rotate(-0.4 + tailSwing);
+  // Fluffy base
+  ctx.fillStyle = '#efe8e0';
+  ctx.beginPath(); ctx.moveTo(4,4); ctx.bezierCurveTo(-8,-8,-20,-20,-14,-38);
+  ctx.bezierCurveTo(-8,-46,-2,-42,0,-34);
+  ctx.bezierCurveTo(4,-24,8,-12,6,4); ctx.fill();
+  // Extra fluff edges
+  ctx.fillStyle = '#f4efe8';
+  ctx.beginPath(); ctx.ellipse(-4,-10,6,4,0.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2,-18,5,4,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-2,-26,5,3,0.2,0,Math.PI*2); ctx.fill();
+  // Chocolate tip with gradient
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.bezierCurveTo(-10,-30,-14,-38,-14,-38);
+  ctx.bezierCurveTo(-8,-46,-2,-42,0,-34);
+  ctx.bezierCurveTo(-2,-30,-6,-28,-8,-30); ctx.fill();
+  ctx.fillStyle = '#6b5538';
+  ctx.beginPath(); ctx.ellipse(-8,-37,5,4,0.3,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // === BACK LEGS - cream with chocolate point paws ===
+  ctx.fillStyle = '#efe8e0';
+  ctx.beginPath(); ctx.ellipse(-14,22,8,14,0.1,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,22,8,14,-0.1,0,Math.PI*2); ctx.fill();
+  // Fur detail on legs
+  ctx.fillStyle = '#e8e0d6';
+  ctx.beginPath(); ctx.ellipse(-14,18,5,6,0.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,18,5,6,-0.2,0,Math.PI*2); ctx.fill();
+  // Chocolate paws
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.ellipse(-14,35,7,4.5,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,35,7,4.5,0,0,Math.PI*2); ctx.fill();
+  // Gradient transition on paws
+  ctx.fillStyle = '#9a8365';
+  ctx.beginPath(); ctx.ellipse(-14,31,6,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,31,6,3,0,0,Math.PI*2); ctx.fill();
+
+  // === BODY - big, round, super fluffy ===
+  // Shadow under body
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.beginPath(); ctx.ellipse(1,14,25,20,0,0,Math.PI*2); ctx.fill();
+  // Main body
+  ctx.fillStyle = '#f0ebe4';
+  ctx.beginPath(); ctx.ellipse(0,12,25,22,0,0,Math.PI*2); ctx.fill();
+  // Lighter belly
+  ctx.fillStyle = '#faf7f2';
+  ctx.beginPath(); ctx.ellipse(2,18,17,14,0,0,Math.PI*2); ctx.fill();
+  // Soft fur texture on body
+  ctx.fillStyle = '#e8e2da';
+  ctx.beginPath(); ctx.ellipse(-16,8,6,8,-0.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18,8,6,8,0.2,0,Math.PI*2); ctx.fill();
+
+  // === CHEST RUFF - ragdolls are famous for this ===
+  ctx.fillStyle = '#f8f4ee';
+  ctx.beginPath(); ctx.ellipse(-16,2,10,12,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18,2,10,12,0.3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#faf6f0';
+  ctx.beginPath(); ctx.ellipse(0,0,16,10,0,0,Math.PI*2); ctx.fill();
+  // Extra ruff layers for fluffiness
+  ctx.fillStyle = '#f5f0ea';
+  ctx.beginPath(); ctx.ellipse(-10,-2,7,8,-0.15,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(12,-2,7,8,0.15,0,Math.PI*2); ctx.fill();
+
+  // === FRONT LEG (behind) ===
+  ctx.fillStyle = '#efe8e0';
+  ctx.beginPath(); ctx.ellipse(6,22,6,13,-0.12,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.ellipse(6,34,6,4,0,0,Math.PI*2); ctx.fill();
+
+  // === BONKING PAW ===
+  ctx.save();
+  ctx.translate(18, 4);
+  if (cat.bonk > 0) ctx.rotate(Math.sin(cat.bonk/8*Math.PI)*1.0);
+  ctx.fillStyle = '#efe8e0';
+  ctx.beginPath(); ctx.ellipse(0,5,6,12,0,0,Math.PI*2); ctx.fill();
+  // Fur on arm
+  ctx.fillStyle = '#e8e0d6';
+  ctx.beginPath(); ctx.ellipse(-2,2,4,5,0.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(3,3,4,5,-0.2,0,Math.PI*2); ctx.fill();
+  // Chocolate paw
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.ellipse(0,16,8,5.5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#9a8365';
+  ctx.beginPath(); ctx.ellipse(0,12,5,3,0,0,Math.PI*2); ctx.fill();
+  // Toe beans - pink and detailed
+  ctx.fillStyle = '#dba0a0';
+  ctx.beginPath(); ctx.arc(-3,14,2.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3,14,2.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0,17,3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#e8b0b0';
+  ctx.beginPath(); ctx.arc(-1.5,11,1.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(1.5,11,1.5,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // === HEAD - big, round, sweet face ===
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  ctx.beginPath(); ctx.ellipse(3,-10,25,23,0,0,Math.PI*2); ctx.fill();
+  // Main head
+  ctx.fillStyle = '#f0ebe4';
+  ctx.beginPath(); ctx.ellipse(2,-12,25,23,0,0,Math.PI*2); ctx.fill();
+
+  // === FACE MASK - signature ragdoll color points ===
+  // Outer mask - rich chocolate
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.ellipse(2,-11,16,14,0,0,Math.PI*2); ctx.fill();
+  // Mid mask - warm brown
+  ctx.fillStyle = '#8f7858';
+  ctx.beginPath(); ctx.ellipse(2,-9,13,11,0,0,Math.PI*2); ctx.fill();
+  // Inner mask - lighter brown
+  ctx.fillStyle = '#a08a6a';
+  ctx.beginPath(); ctx.ellipse(2,-7,10,8,0,0,Math.PI*2); ctx.fill();
+  // White blaze (V-shape between eyes - ragdoll trait)
+  ctx.fillStyle = '#ede6dc';
+  ctx.beginPath(); ctx.moveTo(2,-22); ctx.quadraticCurveTo(-4,-14,-2,-8);
+  ctx.quadraticCurveTo(2,-6,6,-8); ctx.quadraticCurveTo(8,-14,2,-22); ctx.fill();
+  // Cream muzzle - puffy and round
+  ctx.fillStyle = '#ede6dc';
+  ctx.beginPath(); ctx.ellipse(-1,-4,8,6,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(5,-4,8,6,0,0,Math.PI*2); ctx.fill();
+  // Muzzle highlight
+  ctx.fillStyle = '#f4ede4';
+  ctx.beginPath(); ctx.ellipse(2,-3,6,4,0,0,Math.PI*2); ctx.fill();
+
+  // === MAGNIFICENT CHEEK RUFF ===
+  ctx.fillStyle = '#f5f0ea';
+  ctx.beginPath(); ctx.ellipse(-18,-4,11,10,-0.15,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(22,-4,11,10,0.15,0,Math.PI*2); ctx.fill();
+  // More fluff layers
+  ctx.fillStyle = '#f8f4ee';
+  ctx.beginPath(); ctx.ellipse(-14,0,8,8,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18,0,8,8,0.3,0,Math.PI*2); ctx.fill();
+  // Bottom chin fluff
+  ctx.fillStyle = '#f5f0ea';
+  ctx.beginPath(); ctx.ellipse(2,6,12,6,0,0,Math.PI*2); ctx.fill();
+
+  // === EARS - large, wide-set, chocolate with lighter inner ===
+  ctx.fillStyle = '#7a6345';
+  ctx.beginPath(); ctx.moveTo(-18,-26); ctx.lineTo(-14,-44); ctx.lineTo(-4,-25); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(8,-26); ctx.lineTo(18,-44); ctx.lineTo(22,-25); ctx.fill();
+  // Inner ears - warm pink-brown
+  ctx.fillStyle = '#c09078';
+  ctx.beginPath(); ctx.moveTo(-15,-28); ctx.lineTo(-14,-40); ctx.lineTo(-7,-27); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(11,-28); ctx.lineTo(18,-40); ctx.lineTo(19,-27); ctx.fill();
+  // Inner ear pink center
+  ctx.fillStyle = '#d4a090';
+  ctx.beginPath(); ctx.moveTo(-13,-30); ctx.lineTo(-14,-37); ctx.lineTo(-9,-29); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(13,-30); ctx.lineTo(18,-37); ctx.lineTo(17,-29); ctx.fill();
+  // Signature ragdoll ear tufts (lynx tips)
+  ctx.fillStyle = '#f0ece6';
+  ctx.beginPath(); ctx.ellipse(-14,-26,5,3.5,0.4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18,-26,5,3.5,-0.4,0,Math.PI*2); ctx.fill();
+  // Extra fluff wisps coming out of ears
+  ctx.fillStyle = '#e8e2da';
+  ctx.beginPath(); ctx.ellipse(-11,-25,3,2,0.6,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(15,-25,3,2,-0.6,0,Math.PI*2); ctx.fill();
+
+  // === EYES - signature vivid blue ===
+  drawFace(cat, '#4499dd', '#cc9090', true);
+
+  ctx.restore();
+}
+
+
+function drawBall() {
+  // Yarn trail - looks like a string of yarn unraveling behind the ball
+  var yarnColors = ['#ff4466','#ff8833','#ffcc22','#44cc66','#4488ff','#8844cc','#cc44aa'];
+  if (ball.trail.length > 2) {
+    // Draw thick rainbow yarn string connecting trail points
+    for (var layer = 0; layer < 2; layer++) {
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (var i = 1; i < ball.trail.length; i++) {
+        var t0 = ball.trail[i - 1];
+        var t1 = ball.trail[i];
+        var pct = i / ball.trail.length;
+        var alpha = pct * 0.7;
+        var thickness = 1 + pct * 4;
+        // Wavy offset for yarn texture
+        var wave = Math.sin(i * 0.5 + frame * 0.1 + layer * 2) * (2 - pct * 1.5);
+        var col = yarnColors[(i + layer * 3) % 7];
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = thickness - layer * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(t0.x + wave, t0.y + Math.cos(i * 0.6 + layer) * wave);
+        ctx.lineTo(t1.x + wave, t1.y + Math.cos((i+1) * 0.6 + layer) * wave);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    // Fuzzy fibers along the trail
+    for (var i = 2; i < ball.trail.length; i += 3) {
+      var t = ball.trail[i];
+      var pct = i / ball.trail.length;
+      ctx.strokeStyle = yarnColors[i % 7];
+      ctx.globalAlpha = pct * 0.4;
+      ctx.lineWidth = 0.8;
+      var fa = frame * 0.08 + i;
+      ctx.beginPath();
+      ctx.moveTo(t.x, t.y);
+      ctx.lineTo(t.x + Math.cos(fa) * 4, t.y + Math.sin(fa) * 4);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Glow
+  ctx.fillStyle = 'rgba(255,180,50,0.12)';
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r * 2.5, 0, Math.PI*2); ctx.fill();
+
+  // === RAINBOW YARN BALL ===
+  var bx = ball.x, by = ball.y, br = ball.r;
+  var spin = frame * 0.06;
+  var speed = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+  var yarnColors = ['#ff4466','#ff8833','#ffcc22','#44cc66','#4488ff','#8844cc','#cc44aa'];
+
+  // Base ball - gradient
+  var baseGrad = ctx.createRadialGradient(bx - br*0.3, by - br*0.3, 0, bx, by, br);
+  baseGrad.addColorStop(0, '#ff88aa');
+  baseGrad.addColorStop(0.5, '#ee5588');
+  baseGrad.addColorStop(1, '#aa2255');
+  ctx.fillStyle = baseGrad;
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+
+  // Rainbow yarn wrapping
+  ctx.save();
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.clip();
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (var layer = 0; layer < 3; layer++) {
+    var layerR = br - layer * 4;
+    var layerSpin = spin * (1 - layer * 0.3);
+    for (var i = 0; i < 7; i++) {
+      ctx.strokeStyle = yarnColors[(i + layer * 2) % 7];
+      var a = layerSpin + i * 0.9;
+      ctx.beginPath(); ctx.arc(bx, by, layerR, a, a + 0.7); ctx.stroke();
+    }
+  }
+  // Cross-weave threads
+  ctx.lineWidth = 1.2;
+  for (var i = 0; i < 5; i++) {
+    ctx.strokeStyle = yarnColors[i % 7];
+    ctx.globalAlpha = 0.6;
+    var a = spin * 0.4 + i * 1.26;
+    var x1 = bx + Math.cos(a) * br * 0.85;
+    var y1 = by + Math.sin(a) * br * 0.85;
+    var x2 = bx + Math.cos(a + 2.2) * br * 0.85;
+    var y2 = by + Math.sin(a + 2.2) * br * 0.85;
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(bx + Math.cos(a+1.1)*br*0.2, by + Math.sin(a+1.1)*br*0.2, x2, y2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Fuzzy edge - tiny fibers sticking out
+  for (var i = 0; i < 12; i++) {
+    var fa = spin * 0.3 + i * 0.52;
+    var fx = bx + Math.cos(fa) * br;
+    var fy = by + Math.sin(fa) * br;
+    var fl = 2 + Math.sin(frame * 0.1 + i) * 1.5;
+    ctx.strokeStyle = yarnColors[i % 7];
+    ctx.lineWidth = 0.8;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(fx, fy);
+    ctx.lineTo(fx + Math.cos(fa) * fl, fy + Math.sin(fa) * fl);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Shine
+  ctx.fillStyle = 'rgba(255,220,240,0.45)';
+  ctx.beginPath(); ctx.arc(bx - br*0.3, by - br*0.3, br*0.35, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.beginPath(); ctx.arc(bx - br*0.15, by - br*0.4, br*0.18, 0, Math.PI*2); ctx.fill();
+
+  // Trailing yarn string - rainbow and wavy
+  ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+  var startA = spin;
+  var sx = bx + Math.cos(startA) * br * 0.7;
+  var sy = by + Math.sin(startA) * br * 0.7;
+  for (var i = 0; i < 5; i++) {
+    ctx.strokeStyle = yarnColors[i % 7];
+    ctx.globalAlpha = 0.7 - i * 0.12;
+    var t = (i + 1) * 4;
+    var nx = sx - ball.vx * t + Math.sin(frame * 0.15 + i * 1.5) * 6;
+    var ny = sy - ball.vy * t + Math.cos(frame * 0.12 + i * 1.2) * 5;
+    ctx.beginPath(); ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo((sx+nx)/2 + Math.sin(i)*8, (sy+ny)/2 + Math.cos(i)*6, nx, ny);
+    ctx.stroke();
+    sx = nx; sy = ny;
+  }
+  ctx.globalAlpha = 1;
+
+  // Sparkles around the ball when moving fast
+  if (speed > 3) {
+    for (var i = 0; i < 3; i++) {
+      var sa = frame * 0.15 + i * 2.1;
+      var sr = br + 6 + Math.sin(sa * 2) * 3;
+      var sparkX = bx + Math.cos(sa) * sr;
+      var sparkY = by + Math.sin(sa) * sr;
+      ctx.fillStyle = yarnColors[Math.floor(frame * 0.2 + i) % 7];
+      ctx.globalAlpha = 0.5 + Math.sin(sa * 3) * 0.3;
+      // Star sparkle shape
+      ctx.save(); ctx.translate(sparkX, sparkY); ctx.rotate(sa);
+      ctx.beginPath();
+      for (var j = 0; j < 4; j++) {
+        var aa = j * Math.PI / 2;
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(aa) * 3, Math.sin(aa) * 3);
+      }
+      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawField() {
+  // Background
+  var grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#1a1028');
+  grad.addColorStop(1, '#120a1e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Floor
+  ctx.fillStyle = '#2a1e38';
+  ctx.fillRect(0, H - 15, W, 15);
+  ctx.fillStyle = '#352848';
+  ctx.fillRect(0, H - 15, W, 3);
+
+  // Center line
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Center circle
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W/2, H/2, 50, 0, Math.PI*2); ctx.stroke();
+}
+
+function drawParticles() {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life / p.ml;
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (p.life/p.ml), 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawScore() {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(W/2 - 70, 5, 140, 35);
+
+  ctx.fillStyle = '#88ccee';
+  ctx.font = 'bold 26px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(p1Score, W/2 - 15, 33);
+
+  ctx.fillStyle = '#555';
+  ctx.font = 'bold 20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('-', W/2, 30);
+
+  ctx.fillStyle = '#ee88cc';
+  ctx.font = 'bold 26px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(p2Score, W/2 + 15, 33);
+  ctx.textAlign = 'left';
+}
+
+function drawMenu() {
+  ctx.fillStyle = 'rgba(10,10,25,0.88)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#ee88cc';
+  ctx.font = 'bold 52px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Cat Pong!', W/2, H/2 - 100);
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '18px Arial';
+  ctx.fillText('Ragdoll vs Orange Tabby!', W/2, H/2 - 65);
+
+  ctx.fillStyle = '#ffcc44';
+  ctx.font = 'bold 20px Arial';
+  ctx.fillText('Press 1 - vs CPU', W/2, H/2 - 20);
+  ctx.fillText('Press 2 - 2 Player', W/2, H/2 + 15);
+
+  ctx.fillStyle = '#88ccee';
+  ctx.font = '14px Arial';
+  ctx.fillText('Ragdoll (P1): Arrow Up / Down', W/2, H/2 + 55);
+  ctx.fillStyle = '#ee88cc';
+  ctx.fillText('Tabby (P2): W / S to move', W/2, H/2 + 75);
+
+  ctx.fillStyle = '#666';
+  ctx.font = '13px Arial';
+  ctx.fillText('First to ' + winScore + ' wins!', W/2, H/2 + 105);
+  ctx.textAlign = 'left';
+}
+
+function drawCpuSelect() {
+  ctx.fillStyle = 'rgba(10,10,25,0.88)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#ee88cc';
+  ctx.font = 'bold 40px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Choose CPU Level', W/2, H/2 - 90);
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '16px Arial';
+  ctx.fillText('Press 1-9 to pick difficulty', W/2, H/2 - 55);
+
+  var colors = ['#44aa66','#55bb55','#77cc44','#aacc33','#ccbb22','#ddaa22','#ee8822','#ee5533','#ee2244'];
+  var labels = ['Sleepy','Lazy','Chill','Normal','Alert','Quick','Fast','Pro','Demon'];
+  for (var i = 0; i < 9; i++) {
+    var row = Math.floor(i / 3);
+    var col = i % 3;
+    var bx = W/2 - 150 + col * 110;
+    var by = H/2 - 30 + row * 50;
+    // Button bg
+    ctx.fillStyle = colors[i];
+    ctx.beginPath();
+    ctx.moveTo(bx, by); ctx.lineTo(bx + 90, by);
+    ctx.quadraticCurveTo(bx+100, by, bx+100, by+10);
+    ctx.lineTo(bx+100, by+30);
+    ctx.quadraticCurveTo(bx+100, by+40, bx+90, by+40);
+    ctx.lineTo(bx, by+40);
+    ctx.quadraticCurveTo(bx-10, by+40, bx-10, by+30);
+    ctx.lineTo(bx-10, by+10);
+    ctx.quadraticCurveTo(bx-10, by, bx, by);
+    ctx.fill();
+    // Text
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText((i+1), bx + 45, by + 18);
+    ctx.font = '10px Arial';
+    ctx.fillText(labels[i], bx + 45, by + 33);
+  }
+
+  ctx.fillStyle = '#666';
+  ctx.font = '14px Arial';
+  ctx.fillText('Press ESC to go back', W/2, H/2 + 140);
+  ctx.textAlign = 'left';
+}
+
+function drawWin() {
+  ctx.fillStyle = 'rgba(10,10,25,0.8)';
+  ctx.fillRect(0, 0, W, H);
+
+  var winner = p1Score >= winScore ? 'Ragdoll' : (gameMode === '1p' ? 'CPU Tabby' : 'Tabby');
+  var wcolor = p1Score >= winScore ? '#88ccee' : '#ee88cc';
+
+  ctx.fillStyle = wcolor;
+  ctx.font = 'bold 44px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(winner + ' Wins!', W/2, H/2 - 40);
+
+  ctx.fillStyle = '#ccc';
+  ctx.font = '24px Arial';
+  ctx.fillText(p1Score + ' - ' + p2Score, W/2, H/2 + 5);
+
+  if (gameMode === '1p') {
+    ctx.fillStyle = '#aaa';
+    ctx.font = '14px Arial';
+    ctx.fillText('CPU Level: ' + cpuLevel, W/2, H/2 + 30);
+  }
+
+  ctx.fillStyle = '#ffcc44';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText('SPACE - Rematch', W/2, H/2 + 65);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '15px Arial';
+  ctx.fillText('ESC - Main Menu', W/2, H/2 + 90);
+  ctx.textAlign = 'left';
+}
+
+function update() {
+  if (state !== 'play') return;
+  frame++;
+
+  // Cat 1 (Ragdoll) movement - Arrow keys
+  if (keys['ArrowUp']) cat1.vy = -8;
+  else if (keys['ArrowDown']) cat1.vy = 8;
+  else cat1.vy *= 0.82;
+  cat1.y += cat1.vy;
+  if (cat1.y < 0) cat1.y = 0;
+  if (cat1.y + cat1.h > H - 15) cat1.y = H - 15 - cat1.h;
+
+  // Cat 2 (Tabby) movement - W/S or CPU
+  if (gameMode === '1p') {
+    // CPU AI
+    var speed = 2 + cpuLevel * 0.7; // 2.7 to 8.3
+    var react = 0.02 + cpuLevel * 0.01; // reaction speed
+    var targetY = ball.y - cat2.h / 2;
+    // Predict where ball will be
+    if (ball.vx > 0) {
+      var timeToReach = (cat2.x - ball.x) / Math.max(ball.vx, 0.5);
+      targetY = ball.y + ball.vy * timeToReach * 0.4 - cat2.h / 2;
+    }
+    // Add imperfection - wobble decreases with level
+    targetY += Math.sin(frame * 0.03) * (60 / cpuLevel);
+    // Delayed reaction - lower levels have a dead zone
+    var deadZone = 30 - cpuLevel * 3;
+    var diff = targetY - cat2.y;
+    if (Math.abs(diff) > deadZone) {
+      cat2.vy += (diff > 0 ? 1 : -1) * react * speed;
+    }
+    cat2.vy *= 0.88;
+    if (cat2.vy > speed) cat2.vy = speed;
+    if (cat2.vy < -speed) cat2.vy = -speed;
+  } else {
+    if (keys['w'] || keys['W']) cat2.vy = -8;
+    else if (keys['s'] || keys['S']) cat2.vy = 8;
+    else cat2.vy *= 0.82;
+  }
+  cat2.y += cat2.vy;
+  if (cat2.y < 0) cat2.y = 0;
+  if (cat2.y + cat2.h > H - 15) cat2.y = H - 15 - cat2.h;
+
+  // Bonk timers
+  if (cat1.bonk > 0) cat1.bonk--;
+  if (cat2.bonk > 0) cat2.bonk--;
+  if (cat1.blink > 0) cat1.blink--;
+  if (cat2.blink > 0) cat2.blink--;
+  if (Math.random() < 0.005) cat1.blink = 8;
+  if (Math.random() < 0.005) cat2.blink = 8;
+
+  // Ball movement
+  ball.trail.push({x: ball.x, y: ball.y});
+  if (ball.trail.length > 30) ball.trail.shift();
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // Top/bottom bounce
+  if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy = Math.abs(ball.vy); addParticles(ball.x, ball.y, '#fff', 3); }
+  if (ball.y + ball.r > H - 15) { ball.y = H - 15 - ball.r; ball.vy = -Math.abs(ball.vy); addParticles(ball.x, ball.y, '#fff', 3); }
+
+  // Cat 1 bonk (left cat)
+  if (ball.vx < 0 && ball.x - ball.r < cat1.x + cat1.w && ball.x + ball.r > cat1.x &&
+      ball.y + ball.r > cat1.y && ball.y - ball.r < cat1.y + cat1.h) {
+    ball.x = cat1.x + cat1.w + ball.r;
+    var hitPos = (ball.y - (cat1.y + cat1.h/2)) / (cat1.h/2);
+    ball.vx = Math.abs(ball.vx) + 0.3;
+    ball.vy = hitPos * 5 + cat1.vy * 0.3;
+    if (ball.vx > 9) ball.vx = 9;
+    cat1.bonk = 8;
+    addParticles(ball.x, ball.y, '#ff88cc', 8);
+    addParticles(ball.x, ball.y, '#ffcc44', 4);
+  }
+
+  // Cat 2 bonk (right cat)
+  if (ball.vx > 0 && ball.x + ball.r > cat2.x && ball.x - ball.r < cat2.x + cat2.w &&
+      ball.y + ball.r > cat2.y && ball.y - ball.r < cat2.y + cat2.h) {
+    ball.x = cat2.x - ball.r;
+    var hitPos = (ball.y - (cat2.y + cat2.h/2)) / (cat2.h/2);
+    ball.vx = -(Math.abs(ball.vx) + 0.3);
+    ball.vy = hitPos * 5 + cat2.vy * 0.3;
+    if (ball.vx < -9) ball.vx = -9;
+    cat2.bonk = 8;
+    addParticles(ball.x, ball.y, '#88ccff', 8);
+    addParticles(ball.x, ball.y, '#ffcc44', 4);
+  }
+
+  // Score
+  if (ball.x < -30) {
+    p2Score++;
+    addParticles(30, ball.y, '#88ccff', 15);
+    if (p2Score >= winScore) { state = 'win'; } else { resetBall(1); }
+  }
+  if (ball.x > W + 30) {
+    p1Score++;
+    addParticles(W - 30, ball.y, '#ff88cc', 15);
+    if (p1Score >= winScore) { state = 'win'; } else { resetBall(-1); }
+  }
+}
+
+function drawYarnBorder() {
+  var thickness = 8;
+  var colors = ['#ff4444','#ff8833','#ffcc22','#44cc44','#4488ff','#8844cc','#cc44aa'];
+  var segLen = 18; // length of each color segment
+  var offset = (frame * 0.8) % (segLen * colors.length); // animate the rainbow scrolling
+
+  ctx.lineWidth = thickness;
+  ctx.lineCap = 'round';
+
+  // Draw border as colored segments going around the perimeter
+  var perimeter = 2 * (W + H);
+  var pos = -offset;
+  var colorIdx = 0;
+
+  while (pos < perimeter) {
+    var startPos = Math.max(0, pos);
+    var endPos = Math.min(perimeter, pos + segLen);
+    if (endPos > 0) {
+      ctx.strokeStyle = colors[colorIdx % colors.length];
+      ctx.beginPath();
+      var s = posToXY(startPos);
+      var e = posToXY(endPos);
+      // If they're on the same edge, draw a line
+      // Otherwise draw to corner then next edge
+      var segments = getEdgePoints(startPos, endPos);
+      ctx.moveTo(segments[0].x, segments[0].y);
+      for (var i = 1; i < segments.length; i++) {
+        ctx.lineTo(segments[i].x, segments[i].y);
+      }
+      ctx.stroke();
+    }
+    pos += segLen;
+    colorIdx++;
+  }
+
+  // Yarn texture - small crossing lines along the border
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  for (var p = 0; p < perimeter; p += 12) {
+    var pt = posToXY(p);
+    var pt2 = posToXY(p + 4);
+    ctx.beginPath(); ctx.moveTo(pt.x, pt.y); ctx.lineTo(pt2.x, pt2.y); ctx.stroke();
+  }
+}
+
+function posToXY(pos) {
+  var t = 4; // half thickness offset
+  pos = ((pos % (2*(W+H))) + 2*(W+H)) % (2*(W+H));
+  if (pos < W) return {x: pos, y: t};           // top
+  pos -= W;
+  if (pos < H) return {x: W - t, y: pos};       // right
+  pos -= H;
+  if (pos < W) return {x: W - pos, y: H - t};   // bottom
+  pos -= W;
+  return {x: t, y: H - pos};                     // left
+}
+
+function getEdgePoints(start, end) {
+  var pts = [posToXY(start)];
+  // Check if we cross a corner
+  var corners = [W, W+H, 2*W+H, 2*(W+H)];
+  var per = 2*(W+H);
+  for (var i = 0; i < corners.length; i++) {
+    var c = corners[i];
+    if (start < c && end > c) pts.push(posToXY(c));
+  }
+  pts.push(posToXY(end));
+  return pts;
+}
+
+function draw() {
+  drawField();
+  drawBall();
+  drawRagdoll(cat1);
+  drawTabby(cat2);
+  drawParticles();
+  drawYarnBorder();
+  drawScore();
+  if (state === 'menu') drawMenu();
+  if (state === 'cpuselect') drawCpuSelect();
+  if (state === 'win') drawWin();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function beginGame() {
+  state = 'play'; p1Score = 0; p2Score = 0;
+  cat1.y = H/2 - catH/2; cat2.y = H/2 - catH/2;
+  cat1.vy = 0; cat2.vy = 0;
+  resetBall(1);
+}
+
+window.addEventListener('keydown', function(e) {
+  keys[e.key] = true;
+  if (state === 'menu') {
+    if (e.key === '1') { state = 'cpuselect'; }
+    else if (e.key === '2' || e.key === ' ') { gameMode = '2p'; beginGame(); }
+  } else if (state === 'cpuselect') {
+    var num = parseInt(e.key);
+    if (num >= 1 && num <= 9) { cpuLevel = num; gameMode = '1p'; beginGame(); }
+    else if (e.key === 'Escape' || e.key === 'Backspace') state = 'menu';
+  } else if (state === 'win') {
+    if (e.key === ' ' || e.key === 'Enter') beginGame();
+    else if (e.key === 'Escape' || e.key === 'Backspace') state = 'menu';
+  }
+  if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+});
+window.addEventListener('keyup', function(e) { keys[e.key] = false; });
+
+// Mouse/click support for menus
+c.addEventListener('click', function(e) {
+  var rect = c.getBoundingClientRect();
+  var mx = (e.clientX - rect.left) * (W / rect.width);
+  var my = (e.clientY - rect.top) * (H / rect.height);
+
+  if (state === 'menu') {
+    // "vs CPU" button area
+    if (my > H/2 - 35 && my < H/2 - 5) { state = 'cpuselect'; }
+    // "2 Player" button area
+    else if (my > H/2 && my < H/2 + 30) { gameMode = '2p'; beginGame(); }
+  } else if (state === 'cpuselect') {
+    // 3x3 grid of level buttons
+    for (var i = 0; i < 9; i++) {
+      var row = Math.floor(i / 3);
+      var col = i % 3;
+      var bx = W/2 - 150 + col * 110 - 10;
+      var by = H/2 - 30 + row * 50;
+      if (mx > bx && mx < bx + 100 && my > by && my < by + 40) {
+        cpuLevel = i + 1; gameMode = '1p'; beginGame();
+        return;
+      }
+    }
+    // Back area at bottom
+    if (my > H/2 + 125) state = 'menu';
+  } else if (state === 'win') {
+    beginGame();
+  }
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

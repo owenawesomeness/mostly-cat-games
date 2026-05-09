@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turtle Disc Golf</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            border: 3px solid #4a9;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(68, 170, 153, 0.3);
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #ui h1 {
+            font-size: 28px;
+            color: #4a9;
+            text-shadow: 0 0 10px rgba(68, 170, 153, 0.5);
+            margin-bottom: 5px;
+        }
+        #info {
+            font-size: 16px;
+            color: #aaa;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4a9;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(68, 170, 153, 0.8);
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h1>Turtle Disc Golf</h1>
+        <div id="info">Hole 1 | Throws: 0 | Total: 0</div>
+    </div>
+    <div id="message"></div>
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
+        const message = document.getElementById('message');
+
+        canvas.width = 900;
+        canvas.height = 650;
+
+        // Game state
+        let state = 'aiming'; // aiming, charging, flying, landed, holeDone, gameOver
+        let currentHole = 0;
+        let throws = 0;
+        let totalThrows = 0;
+        let par = [3, 4, 4, 4, 5, 5, 4, 5, 5];
+        let messageTimer = 0;
+
+        // Turtle (player)
+        let turtle = { x: 0, y: 0, angle: 0, size: 20 };
+
+        // Disc
+        let disc = { x: 0, y: 0, vx: 0, vy: 0, speed: 0, active: false, trail: [] };
+
+        // Aim arrow
+        let aimAngle = 0;
+        let power = 0;
+        let powerDir = 1;
+        let charging = false;
+
+        // Hyzer/Anhyzer: -1 = hyzer (curves left), 0 = straight, 1 = anhyzer (curves right)
+        let discCurve = 0;
+
+        // Basket (goal)
+        let basket = { x: 0, y: 0, radius: 18 };
+
+        // Obstacles
+        let obstacles = [];
+
+        // Grass patches for decoration
+        let grassPatches = [];
+
+        // Holes data
+        const holes = [
+            {
+                start: { x: 120, y: 325 },
+                basket: { x: 780, y: 325 },
+                obstacles: [
+                    { type: 'tree', x: 300, y: 220 },
+                    { type: 'tree', x: 350, y: 420 },
+                    { type: 'sand', x: 500, y: 280, w: 100, h: 80 },
+                    { type: 'bush', x: 600, y: 350, w: 80, h: 20 },
+                    { type: 'cactus', x: 680, y: 250 },
+                ]
+            },
+            {
+                start: { x: 120, y: 500 },
+                basket: { x: 750, y: 150 },
+                obstacles: [
+                    { type: 'rock', x: 350, y: 350, w: 80, h: 40 },
+                    { type: 'tree', x: 550, y: 250 },
+                    { type: 'water', x: 400, y: 150, w: 120, h: 60 },
+                    { type: 'windmill', x: 250, y: 250 },
+                    { type: 'bush', x: 500, y: 400, w: 100, h: 20 },
+                    { type: 'sand', x: 620, y: 180, w: 80, h: 60 },
+                ]
+            },
+            {
+                start: { x: 100, y: 150 },
+                basket: { x: 800, y: 500 },
+                obstacles: [
+                    { type: 'tree', x: 300, y: 200 },
+                    { type: 'tree', x: 500, y: 350 },
+                    { type: 'tree', x: 350, y: 450 },
+                    { type: 'rock', x: 650, y: 400, w: 60, h: 35 },
+                    { type: 'cactus', x: 200, y: 350 },
+                    { type: 'cactus', x: 550, y: 200 },
+                    { type: 'sand', x: 400, y: 280, w: 90, h: 70 },
+                    { type: 'windmill', x: 700, y: 300 },
+                ]
+            },
+            {
+                start: { x: 450, y: 550 },
+                basket: { x: 450, y: 120 },
+                obstacles: [
+                    { type: 'rock', x: 350, y: 350, w: 70, h: 30 },
+                    { type: 'rock', x: 500, y: 300, w: 70, h: 30 },
+                    { type: 'water', x: 390, y: 220, w: 120, h: 50 },
+                    { type: 'bush', x: 350, y: 450, w: 60, h: 20 },
+                    { type: 'bush', x: 530, y: 450, w: 60, h: 20 },
+                    { type: 'windmill', x: 300, y: 250 },
+                    { type: 'cactus', x: 580, y: 380 },
+                ]
+            },
+            {
+                start: { x: 100, y: 325 },
+                basket: { x: 800, y: 325 },
+                obstacles: [
+                    { type: 'tree', x: 300, y: 200 },
+                    { type: 'tree', x: 300, y: 450 },
+                    { type: 'rock', x: 500, y: 300, w: 50, h: 100 },
+                    { type: 'water', x: 600, y: 250, w: 80, h: 150 },
+                    { type: 'sand', x: 200, y: 300, w: 70, h: 60 },
+                    { type: 'windmill', x: 420, y: 180 },
+                    { type: 'cactus', x: 700, y: 450 },
+                    { type: 'bush', x: 650, y: 380, w: 90, h: 20 },
+                ]
+            },
+            {
+                start: { x: 780, y: 550 },
+                basket: { x: 150, y: 120 },
+                obstacles: [
+                    { type: 'tree', x: 600, y: 450 },
+                    { type: 'tree', x: 400, y: 300 },
+                    { type: 'tree', x: 250, y: 200 },
+                    { type: 'rock', x: 500, y: 200, w: 80, h: 40 },
+                    { type: 'water', x: 300, y: 350, w: 100, h: 80 },
+                    { type: 'sand', x: 550, y: 350, w: 100, h: 70 },
+                    { type: 'cactus', x: 200, y: 350 },
+                    { type: 'windmill', x: 400, y: 450 },
+                    { type: 'bush', x: 150, y: 250, w: 80, h: 20 },
+                ]
+            },
+            {
+                start: { x: 120, y: 120 },
+                basket: { x: 780, y: 550 },
+                obstacles: [
+                    { type: 'tree', x: 250, y: 250 },
+                    { type: 'rock', x: 450, y: 350, w: 100, h: 30 },
+                    { type: 'tree', x: 600, y: 400 },
+                    { type: 'water', x: 300, y: 400, w: 100, h: 60 },
+                    { type: 'windmill', x: 500, y: 200 },
+                    { type: 'sand', x: 650, y: 500, w: 80, h: 60 },
+                    { type: 'cactus', x: 350, y: 150 },
+                    { type: 'bush', x: 200, y: 350, w: 70, h: 20 },
+                    { type: 'cactus', x: 700, y: 300 },
+                ]
+            },
+            {
+                start: { x: 120, y: 500 },
+                basket: { x: 800, y: 200 },
+                obstacles: [
+                    { type: 'water', x: 250, y: 300, w: 150, h: 80 },
+                    { type: 'tree', x: 450, y: 200 },
+                    { type: 'tree', x: 500, y: 400 },
+                    { type: 'rock', x: 650, y: 250, w: 60, h: 40 },
+                    { type: 'rock', x: 350, y: 450, w: 50, h: 30 },
+                    { type: 'windmill', x: 300, y: 180 },
+                    { type: 'sand', x: 580, y: 350, w: 90, h: 70 },
+                    { type: 'bush', x: 700, y: 300, w: 70, h: 20 },
+                    { type: 'cactus', x: 200, y: 200 },
+                    { type: 'cactus', x: 550, y: 500 },
+                ]
+            },
+            {
+                start: { x: 450, y: 580 },
+                basket: { x: 450, y: 100 },
+                obstacles: [
+                    { type: 'tree', x: 300, y: 450 },
+                    { type: 'tree', x: 600, y: 450 },
+                    { type: 'rock', x: 380, y: 300, w: 140, h: 30 },
+                    { type: 'water', x: 350, y: 180, w: 200, h: 60 },
+                    { type: 'tree', x: 450, y: 350 },
+                    { type: 'windmill', x: 550, y: 250 },
+                    { type: 'windmill', x: 350, y: 500 },
+                    { type: 'sand', x: 250, y: 300, w: 80, h: 60 },
+                    { type: 'cactus', x: 650, y: 350 },
+                    { type: 'bush', x: 400, y: 140, w: 100, h: 20 },
+                ]
+            },
+        ];
+
+        function generateGrass() {
+            grassPatches = [];
+            for (let i = 0; i < 40; i++) {
+                grassPatches.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 3 + Math.random() * 6,
+                    shade: Math.random() * 0.3
+                });
+            }
+        }
+
+        function loadHole(index) {
+            const hole = holes[index];
+            turtle.x = hole.start.x;
+            turtle.y = hole.start.y;
+            basket.x = hole.basket.x;
+            basket.y = hole.basket.y;
+            obstacles = hole.obstacles.map(o => ({ ...o }));
+            disc.active = false;
+            disc.trail = [];
+            throws = 0;
+            state = 'aiming';
+            power = 0;
+            charging = false;
+            generateGrass();
+        }
+
+        function showMessage(text, duration = 1500) {
+            message.textContent = text;
+            message.style.opacity = 1;
+            clearTimeout(messageTimer);
+            messageTimer = setTimeout(() => {
+                message.style.opacity = 0;
+            }, duration);
+        }
+
+        function getScoreName(diff) {
+            if (diff <= -3) return 'Albatross!!';
+            if (diff === -2) return 'Eagle!';
+            if (diff === -1) return 'Birdie!';
+            if (diff === 0) return 'Par';
+            if (diff === 1) return 'Bogey';
+            if (diff === 2) return 'Double Bogey';
+            return 'Triple Bogey+';
+        }
+
+        // Drawing functions
+        function drawGrass() {
+            grassPatches.forEach(g => {
+                ctx.fillStyle = `rgba(60, ${140 + g.shade * 60}, 60, 0.5)`;
+                ctx.beginPath();
+                ctx.moveTo(g.x, g.y);
+                ctx.lineTo(g.x - g.size / 2, g.y + g.size);
+                ctx.lineTo(g.x + g.size / 2, g.y + g.size);
+                ctx.closePath();
+                ctx.fill();
+            });
+        }
+
+        function drawTurtle(x, y, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            // Shell
+            ctx.fillStyle = '#2d8a4e';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 18, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#1a5c30';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Shell pattern
+            ctx.strokeStyle = '#1a5c30';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-6, -8);
+            ctx.lineTo(-6, 8);
+            ctx.moveTo(6, -8);
+            ctx.lineTo(6, 8);
+            ctx.moveTo(-14, 0);
+            ctx.lineTo(14, 0);
+            ctx.stroke();
+
+            // Head
+            ctx.fillStyle = '#5abf5a';
+            ctx.beginPath();
+            ctx.ellipse(20, 0, 8, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(23, -3, 3, 0, Math.PI * 2);
+            ctx.arc(23, 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(24, -3, 1.5, 0, Math.PI * 2);
+            ctx.arc(24, 3, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Legs
+            ctx.fillStyle = '#5abf5a';
+            const legPositions = [[-10, -12], [-10, 12], [8, -12], [8, 12]];
+            legPositions.forEach(([lx, ly]) => {
+                ctx.beginPath();
+                ctx.ellipse(lx, ly, 5, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Tail
+            ctx.fillStyle = '#5abf5a';
+            ctx.beginPath();
+            ctx.moveTo(-18, 0);
+            ctx.lineTo(-24, -3);
+            ctx.lineTo(-24, 3);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawDisc(x, y) {
+            // Trail - pink to blue gradient
+            ctx.lineWidth = 3;
+            for (let i = 1; i < disc.trail.length; i++) {
+                const alpha = i / disc.trail.length * 0.7;
+                const t = i / disc.trail.length;
+                const r = Math.round(255 * (1 - t) + 80 * t);
+                const g = Math.round(100 * (1 - t) + 160 * t);
+                const b = Math.round(180 * (1 - t) + 255 * t);
+                ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(disc.trail[i - 1].x, disc.trail[i - 1].y);
+                ctx.lineTo(disc.trail[i].x, disc.trail[i].y);
+                ctx.stroke();
+            }
+
+            // Disc - pink and blue split
+            const grad = ctx.createLinearGradient(x - 8, y - 8, x + 8, y + 8);
+            grad.addColorStop(0, '#ff69b4');
+            grad.addColorStop(0.5, '#da70d6');
+            grad.addColorStop(1, '#4facfe');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#c050a0';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Inner ring
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.arc(x - 2, y - 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawBasket(x, y) {
+            // Pole
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x, y + 25);
+            ctx.lineTo(x, y - 20);
+            ctx.stroke();
+
+            // Chains
+            ctx.strokeStyle = '#bbb';
+            ctx.lineWidth = 1;
+            for (let i = -3; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(x + i * 5, y - 20);
+                ctx.lineTo(x + i * 3, y);
+                ctx.stroke();
+            }
+
+            // Top ring
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(x, y - 20, 16, 4, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Basket rim
+            ctx.fillStyle = '#666';
+            ctx.beginPath();
+            ctx.ellipse(x, y + 2, 14, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Flag
+            ctx.fillStyle = '#ff4444';
+            ctx.beginPath();
+            ctx.moveTo(x, y - 20);
+            ctx.lineTo(x + 15, y - 28);
+            ctx.lineTo(x, y - 36);
+            ctx.closePath();
+            ctx.fill();
+
+            // Hole number on flag
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(currentHole + 1, x + 6, y - 25);
+        }
+
+        function drawTree(x, y) {
+            // Trunk
+            ctx.fillStyle = '#6b4226';
+            ctx.fillRect(x - 6, y, 12, 30);
+
+            // Foliage layers
+            const greens = ['#1a7a1a', '#228B22', '#2d9e2d'];
+            for (let i = 0; i < 3; i++) {
+                ctx.fillStyle = greens[i];
+                ctx.beginPath();
+                ctx.moveTo(x, y - 40 + i * 12);
+                ctx.lineTo(x - 22 + i * 2, y + i * 12);
+                ctx.lineTo(x + 22 - i * 2, y + i * 12);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        function drawRock(x, y, w, h) {
+            ctx.fillStyle = '#777';
+            ctx.beginPath();
+            ctx.moveTo(x, y - h / 2);
+            ctx.quadraticCurveTo(x + w / 2 + 5, y - h / 2 - 5, x + w / 2, y);
+            ctx.quadraticCurveTo(x + w / 2 + 3, y + h / 2 + 3, x, y + h / 2);
+            ctx.quadraticCurveTo(x - w / 2 - 3, y + h / 2 + 3, x - w / 2, y);
+            ctx.quadraticCurveTo(x - w / 2 - 5, y - h / 2 - 5, x, y - h / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.beginPath();
+            ctx.ellipse(x - w / 6, y - h / 4, w / 5, h / 5, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawWater(x, y, w, h) {
+            // Water body
+            ctx.fillStyle = 'rgba(30, 100, 200, 0.6)';
+            ctx.beginPath();
+            ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(60, 140, 255, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Ripples
+            const time = Date.now() / 1000;
+            for (let i = 0; i < 3; i++) {
+                const rx = x + w / 2 + Math.sin(time + i * 2) * w / 5;
+                const ry = y + h / 2 + Math.cos(time + i * 1.5) * h / 5;
+                ctx.strokeStyle = 'rgba(150, 200, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(rx, ry, 5 + Math.sin(time * 2 + i) * 2, 0, Math.PI);
+                ctx.stroke();
+            }
+        }
+
+        function drawSand(x, y, w, h) {
+            // Sand bunker
+            ctx.fillStyle = '#d4b96a';
+            ctx.beginPath();
+            ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#b89a4a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Sand texture dots
+            ctx.fillStyle = '#c4a95a';
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const rx = x + w / 2 + Math.cos(angle) * w / 4;
+                const ry = y + h / 2 + Math.sin(angle) * h / 4;
+                ctx.beginPath();
+                ctx.arc(rx, ry, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Wavy lines for sand texture
+            ctx.strokeStyle = '#c4a95a';
+            ctx.lineWidth = 1;
+            for (let i = -1; i <= 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(x + w / 2 - w / 3, y + h / 2 + i * 10);
+                ctx.quadraticCurveTo(x + w / 2, y + h / 2 + i * 10 - 5, x + w / 2 + w / 3, y + h / 2 + i * 10);
+                ctx.stroke();
+            }
+        }
+
+        function drawWindmill(x, y) {
+            // Base
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x - 8, y + 10, 16, 25);
+
+            // Pole
+            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x, y + 10);
+            ctx.lineTo(x, y - 25);
+            ctx.stroke();
+
+            // Spinning blades
+            const time = Date.now() / 600;
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 4; i++) {
+                const bladeAngle = time + (i * Math.PI / 2);
+                const bx = x + Math.cos(bladeAngle) * 28;
+                const by = (y - 25) + Math.sin(bladeAngle) * 28;
+                ctx.strokeStyle = '#ddd';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 25);
+                ctx.lineTo(bx, by);
+                ctx.stroke();
+
+                // Blade tip
+                ctx.fillStyle = '#ff4444';
+                ctx.beginPath();
+                ctx.arc(bx, by, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Center hub
+            ctx.fillStyle = '#ccc';
+            ctx.beginPath();
+            ctx.arc(x, y - 25, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function drawBush(x, y, w, h) {
+            // Main hedge body
+            const bushH = 24;
+            ctx.fillStyle = '#2a7a2a';
+            ctx.beginPath();
+            // Draw as a series of bumps on top
+            ctx.moveTo(x, y + bushH / 2);
+            const bumps = Math.floor(w / 18);
+            for (let i = 0; i <= bumps; i++) {
+                const bx = x + (i / bumps) * w;
+                const by = y - bushH / 2 + (i % 2 === 0 ? -4 : 0);
+                ctx.quadraticCurveTo(bx - w / bumps / 2, by - 10, bx, by);
+            }
+            ctx.lineTo(x + w, y + bushH / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#1a5a1a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Leaf details
+            ctx.fillStyle = '#3a9a3a';
+            for (let i = 0; i < bumps; i++) {
+                const lx = x + 10 + (i / bumps) * (w - 20);
+                ctx.beginPath();
+                ctx.arc(lx, y - 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Small flowers
+            ctx.fillStyle = '#ff88aa';
+            for (let i = 0; i < 3; i++) {
+                const fx = x + 8 + i * (w / 3);
+                ctx.beginPath();
+                ctx.arc(fx, y - 6, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawCactus(x, y) {
+            // Main body
+            ctx.fillStyle = '#2d8a3e';
+            ctx.beginPath();
+            ctx.roundRect(x - 8, y - 30, 16, 55, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#1a6a2e';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Left arm
+            ctx.fillStyle = '#2d8a3e';
+            ctx.beginPath();
+            ctx.roundRect(x - 26, y - 20, 18, 10, 5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.roundRect(x - 26, y - 30, 10, 16, 5);
+            ctx.fill();
+            ctx.strokeStyle = '#1a6a2e';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(x - 26, y - 20, 18, 10, 5);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.roundRect(x - 26, y - 30, 10, 16, 5);
+            ctx.stroke();
+
+            // Right arm
+            ctx.fillStyle = '#2d8a3e';
+            ctx.beginPath();
+            ctx.roundRect(x + 8, y - 15, 18, 10, 5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.roundRect(x + 18, y - 28, 10, 18, 5);
+            ctx.fill();
+            ctx.strokeStyle = '#1a6a2e';
+            ctx.beginPath();
+            ctx.roundRect(x + 8, y - 15, 18, 10, 5);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.roundRect(x + 18, y - 28, 10, 18, 5);
+            ctx.stroke();
+
+            // Spines
+            ctx.strokeStyle = '#aadd88';
+            ctx.lineWidth = 1;
+            const spines = [[-4, -25], [4, -28], [0, -15], [-6, -5], [6, 0], [0, 10]];
+            spines.forEach(([sx, sy]) => {
+                ctx.beginPath();
+                ctx.moveTo(x + sx, y + sy);
+                ctx.lineTo(x + sx + (sx > 0 ? 4 : -4), y + sy - 4);
+                ctx.stroke();
+            });
+
+            // Little flower on top
+            ctx.fillStyle = '#ff6688';
+            ctx.beginPath();
+            ctx.arc(x, y - 33, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(x, y - 33, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(o => {
+                if (o.type === 'tree') drawTree(o.x, o.y);
+                else if (o.type === 'rock') drawRock(o.x, o.y, o.w, o.h);
+                else if (o.type === 'water') drawWater(o.x, o.y, o.w, o.h);
+                else if (o.type === 'sand') drawSand(o.x, o.y, o.w, o.h);
+                else if (o.type === 'windmill') drawWindmill(o.x, o.y);
+                else if (o.type === 'bush') drawBush(o.x, o.y, o.w, o.h);
+                else if (o.type === 'cactus') drawCactus(o.x, o.y);
+            });
+        }
+
+        function drawPowerBar() {
+            if (state !== 'aiming' && state !== 'charging') return;
+
+            const barX = 30;
+            const barY = canvas.height - 50;
+            const barW = 200;
+            const barH = 20;
+
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barW, barH);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barW, barH);
+
+            // Power fill
+            const ratio = power / 100;
+            const gradient = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+            gradient.addColorStop(0, '#4a9');
+            gradient.addColorStop(0.5, '#fa0');
+            gradient.addColorStop(1, '#f44');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(barX, barY, barW * ratio, barH);
+
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('POWER', barX, barY - 5);
+
+            if (state === 'charging') {
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(Math.round(power) + '%', barX + barW + 10, barY + 15);
+            }
+
+            // Curve indicator
+            const curveX = canvas.width - 180;
+            const curveY = canvas.height - 50;
+            const curveW = 150;
+            const curveH = 20;
+
+            ctx.fillStyle = '#333';
+            ctx.fillRect(curveX, curveY, curveW, curveH);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(curveX, curveY, curveW, curveH);
+
+            // Center line
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(curveX + curveW / 2, curveY);
+            ctx.lineTo(curveX + curveW / 2, curveY + curveH);
+            ctx.stroke();
+
+            // Curve fill
+            const curveCenter = curveX + curveW / 2;
+            const curveAmount = discCurve * (curveW / 2);
+            if (discCurve < 0) {
+                const grad = ctx.createLinearGradient(curveCenter + curveAmount, curveY, curveCenter, curveY);
+                grad.addColorStop(0, '#ff69b4');
+                grad.addColorStop(1, '#ff69b466');
+                ctx.fillStyle = grad;
+                ctx.fillRect(curveCenter + curveAmount, curveY, -curveAmount, curveH);
+            } else if (discCurve > 0) {
+                const grad = ctx.createLinearGradient(curveCenter, curveY, curveCenter + curveAmount, curveY);
+                grad.addColorStop(0, '#4facfe66');
+                grad.addColorStop(1, '#4facfe');
+                ctx.fillStyle = grad;
+                ctx.fillRect(curveCenter, curveY, curveAmount, curveH);
+            }
+
+            // Label
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            const curveLabel = discCurve < 0 ? 'HYZER' : discCurve > 0 ? 'ANHYZER' : 'STRAIGHT';
+            const labelColor = discCurve < 0 ? '#ff69b4' : discCurve > 0 ? '#4facfe' : '#aaa';
+            ctx.fillStyle = labelColor;
+            ctx.fillText(curveLabel, curveX + curveW / 2, curveY - 5);
+
+            // Q and E hints
+            ctx.fillStyle = '#666';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Q', curveX, curveY - 5);
+            ctx.textAlign = 'right';
+            ctx.fillText('E', curveX + curveW, curveY - 5);
+        }
+
+        function drawAimArrow() {
+            if (state !== 'aiming' && state !== 'charging') return;
+
+            const len = 50;
+            const endX = turtle.x + Math.cos(aimAngle) * len;
+            const endY = turtle.y + Math.sin(aimAngle) * len;
+
+            // Curved flight path preview
+            if (discCurve !== 0) {
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = discCurve < 0 ? 'rgba(255, 105, 180, 0.4)' : 'rgba(79, 172, 254, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                let px = turtle.x, py = turtle.y;
+                let pvx = Math.cos(aimAngle) * 6;
+                let pvy = Math.sin(aimAngle) * 6;
+                ctx.moveTo(px, py);
+                for (let step = 0; step < 30; step++) {
+                    pvx += -pvy * 0.04 * discCurve;
+                    pvy += pvx * 0.04 * discCurve;
+                    pvx *= 0.97;
+                    pvy *= 0.97;
+                    px += pvx;
+                    py += pvy;
+                    ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            } else {
+                // Straight dotted line
+                ctx.setLineDash([5, 5]);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(endX, endY);
+                ctx.lineTo(turtle.x + Math.cos(aimAngle) * 200, turtle.y + Math.sin(aimAngle) * 200);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Arrow
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(turtle.x, turtle.y);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
+            // Arrowhead
+            const headLen = 10;
+            const a1 = aimAngle + Math.PI * 0.8;
+            const a2 = aimAngle - Math.PI * 0.8;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX + Math.cos(a1) * headLen, endY + Math.sin(a1) * headLen);
+            ctx.lineTo(endX + Math.cos(a2) * headLen, endY + Math.sin(a2) * headLen);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawHUD() {
+            const holePar = par[currentHole];
+            const diff = throws - holePar;
+            let scoreColor = '#4a9';
+            if (diff > 0) scoreColor = '#f44';
+            else if (diff < 0) scoreColor = '#4af';
+
+            info.innerHTML = `Hole ${currentHole + 1}/9 | Par ${holePar} | Throws: <span style="color:${scoreColor}">${throws}</span> | Total: ${totalThrows}`;
+
+            // Instructions at bottom
+            if (state === 'aiming') {
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Aim: Mouse/Arrows | SPACE: charge & throw | Q/E: hyzer/anhyzer | W: straight', canvas.width / 2, canvas.height - 15);
+            }
+        }
+
+        function drawScorecard() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(100, 80, 700, 450);
+            ctx.strokeStyle = '#4a9';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(100, 80, 700, 450);
+
+            ctx.fillStyle = '#4a9';
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('SCORECARD', canvas.width / 2, 130);
+
+            // Headers
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = '#aaa';
+            const startX = 160;
+            const cols = 9;
+            const colW = 60;
+
+            ctx.textAlign = 'center';
+            for (let i = 0; i < cols; i++) {
+                ctx.fillText(`H${i + 1}`, startX + i * colW + 30, 170);
+            }
+            ctx.fillText('TOT', startX + cols * colW + 30, 170);
+
+            // Par row
+            ctx.fillStyle = '#888';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Par', 115, 200);
+            ctx.textAlign = 'center';
+            let totalPar = 0;
+            for (let i = 0; i < cols; i++) {
+                ctx.fillText(par[i], startX + i * colW + 30, 200);
+                totalPar += par[i];
+            }
+            ctx.fillText(totalPar, startX + cols * colW + 30, 200);
+
+            // Score row
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('You', 115, 235);
+            ctx.textAlign = 'center';
+
+            let runTotal = 0;
+            for (let i = 0; i < cols; i++) {
+                if (scorecard[i] !== undefined) {
+                    const s = scorecard[i];
+                    runTotal += s;
+                    const d = s - par[i];
+                    ctx.fillStyle = d < 0 ? '#4af' : d === 0 ? '#4a9' : '#f44';
+                    ctx.fillText(s, startX + i * colW + 30, 235);
+                } else {
+                    ctx.fillStyle = '#555';
+                    ctx.fillText('-', startX + i * colW + 30, 235);
+                }
+            }
+            ctx.fillStyle = '#fff';
+            ctx.fillText(totalThrows, startX + cols * colW + 30, 235);
+
+            // Final score
+            const diff = totalThrows - totalPar;
+            let label = '';
+            if (diff < 0) label = `${diff} (Under Par!)`;
+            else if (diff === 0) label = 'Even Par!';
+            else label = `+${diff} (Over Par)`;
+
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = diff <= 0 ? '#4a9' : '#fa0';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Final Score: ${totalThrows} — ${label}`, canvas.width / 2, 310);
+
+            // Rating
+            let rating = '';
+            if (diff <= -5) rating = 'Legendary Turtle!';
+            else if (diff <= -2) rating = 'Amazing!';
+            else if (diff <= 0) rating = 'Great Round!';
+            else if (diff <= 3) rating = 'Not Bad!';
+            else if (diff <= 6) rating = 'Keep Practicing!';
+            else rating = 'Slow and Steady...';
+
+            ctx.font = '20px Arial';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(rating, canvas.width / 2, 350);
+
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#4a9';
+            ctx.fillText('Press SPACE or Click to Play Again', canvas.width / 2, 480);
+        }
+
+        let scorecard = [];
+
+        // Collision detection
+        function checkTreeCollision(dx, dy, tree) {
+            // Trunk collision (rectangle)
+            const trunkLeft = tree.x - 6;
+            const trunkRight = tree.x + 6;
+            const trunkTop = tree.y;
+            const trunkBottom = tree.y + 30;
+
+            if (dx >= trunkLeft - 8 && dx <= trunkRight + 8 && dy >= trunkTop - 8 && dy <= trunkBottom + 8) {
+                return 'bounce';
+            }
+
+            // Foliage collision (triangle-ish circle)
+            const foliageDist = Math.sqrt((dx - tree.x) ** 2 + (dy - (tree.y - 10)) ** 2);
+            if (foliageDist < 28) {
+                return 'bounce';
+            }
+
+            return null;
+        }
+
+        function checkRockCollision(dx, dy, rock) {
+            const hw = rock.w / 2 + 8;
+            const hh = rock.h / 2 + 8;
+            if (dx >= rock.x - hw && dx <= rock.x + hw && dy >= rock.y - hh && dy <= rock.y + hh) {
+                return 'bounce';
+            }
+            return null;
+        }
+
+        function checkWaterCollision(dx, dy, water) {
+            const cx = water.x + water.w / 2;
+            const cy = water.y + water.h / 2;
+            const rx = water.w / 2;
+            const ry = water.h / 2;
+            const norm = ((dx - cx) / rx) ** 2 + ((dy - cy) / ry) ** 2;
+            if (norm < 1) {
+                return 'water';
+            }
+            return null;
+        }
+
+        function checkSandCollision(dx, dy, sand) {
+            const cx = sand.x + sand.w / 2;
+            const cy = sand.y + sand.h / 2;
+            const rx = sand.w / 2;
+            const ry = sand.h / 2;
+            const norm = ((dx - cx) / rx) ** 2 + ((dy - cy) / ry) ** 2;
+            if (norm < 1) {
+                return 'sand';
+            }
+            return null;
+        }
+
+        function checkWindmillCollision(dx, dy, wm) {
+            // Check against spinning blades
+            const time = Date.now() / 600;
+            const hubX = wm.x;
+            const hubY = wm.y - 25;
+
+            // Check base
+            if (dx >= wm.x - 12 && dx <= wm.x + 12 && dy >= wm.y + 5 && dy <= wm.y + 40) {
+                return 'bounce';
+            }
+
+            // Check each blade
+            for (let i = 0; i < 4; i++) {
+                const bladeAngle = time + (i * Math.PI / 2);
+                // Check points along the blade
+                for (let t = 0.3; t <= 1; t += 0.2) {
+                    const bx = hubX + Math.cos(bladeAngle) * 28 * t;
+                    const by = hubY + Math.sin(bladeAngle) * 28 * t;
+                    const dist = Math.sqrt((dx - bx) ** 2 + (dy - by) ** 2);
+                    if (dist < 10) {
+                        return 'windmill';
+                    }
+                }
+            }
+            return null;
+        }
+
+        function checkBushCollision(dx, dy, bush) {
+            const hw = bush.w / 2 + 8;
+            const hh = 16;
+            const cx = bush.x + bush.w / 2;
+            if (dx >= cx - hw && dx <= cx + hw && dy >= bush.y - hh && dy <= bush.y + hh) {
+                return 'bounce';
+            }
+            return null;
+        }
+
+        function checkCactusCollision(dx, dy, cactus) {
+            // Main body
+            if (dx >= cactus.x - 12 && dx <= cactus.x + 12 && dy >= cactus.y - 35 && dy <= cactus.y + 28) {
+                return 'cactus';
+            }
+            // Left arm
+            if (dx >= cactus.x - 30 && dx <= cactus.x - 6 && dy >= cactus.y - 34 && dy <= cactus.y - 8) {
+                return 'cactus';
+            }
+            // Right arm
+            if (dx >= cactus.x + 6 && dx <= cactus.x + 32 && dy >= cactus.y - 32 && dy <= cactus.y - 3) {
+                return 'cactus';
+            }
+            return null;
+        }
+
+        function checkBasketCollision(dx, dy) {
+            const dist = Math.sqrt((dx - basket.x) ** 2 + (dy - basket.y) ** 2);
+            return dist < basket.radius + 8;
+        }
+
+        // Mouse tracking
+        let mouseX = 0, mouseY = 0;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            if (state === 'aiming') {
+                aimAngle = Math.atan2(mouseY - turtle.y, mouseX - turtle.x);
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (state === 'gameOver') {
+                resetGame();
+                return;
+            }
+            if (state === 'aiming') {
+                state = 'charging';
+                charging = true;
+                power = 0;
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (state === 'charging') {
+                launchDisc();
+            }
+        });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (state === 'gameOver') {
+                    resetGame();
+                    return;
+                }
+                if (state === 'aiming') {
+                    state = 'charging';
+                    charging = true;
+                    power = 0;
+                }
+            }
+            if (state === 'aiming' || state === 'charging') {
+                if (e.code === 'ArrowLeft') aimAngle -= 0.05;
+                if (e.code === 'ArrowRight') aimAngle += 0.05;
+                if (e.code === 'KeyQ') {
+                    discCurve = Math.max(-1, discCurve - 0.25);
+                }
+                if (e.code === 'KeyE') {
+                    discCurve = Math.min(1, discCurve + 0.25);
+                }
+                if (e.code === 'KeyW') {
+                    discCurve = 0;
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && state === 'charging') {
+                launchDisc();
+            }
+        });
+
+        function launchDisc() {
+            state = 'flying';
+            charging = false;
+            const speed = 3 + (power / 100) * 14;
+            disc.x = turtle.x;
+            disc.y = turtle.y;
+            disc.vx = Math.cos(aimAngle) * speed;
+            disc.vy = Math.sin(aimAngle) * speed;
+            disc.active = true;
+            disc.trail = [];
+            throws++;
+            totalThrows++;
+            turtle.angle = aimAngle;
+        }
+
+        function update() {
+            // Power charging
+            if (state === 'charging') {
+                power += powerDir * 1.5;
+                if (power >= 100) { power = 100; powerDir = -1; }
+                if (power <= 0) { power = 0; powerDir = 1; }
+            }
+
+            // Disc physics
+            if (state === 'flying' && disc.active) {
+                disc.trail.push({ x: disc.x, y: disc.y });
+                if (disc.trail.length > 30) disc.trail.shift();
+
+                disc.x += disc.vx;
+                disc.y += disc.vy;
+
+                // Drag
+                disc.vx *= 0.993;
+                disc.vy *= 0.993;
+
+                // Hyzer/Anhyzer curve
+                if (discCurve !== 0) {
+                    const speed = Math.sqrt(disc.vx ** 2 + disc.vy ** 2);
+                    if (speed > 0.5) {
+                        // Perpendicular force: rotate velocity 90 degrees and apply
+                        const curveStrength = 0.04 * discCurve;
+                        disc.vx += -disc.vy * curveStrength;
+                        disc.vy += disc.vx * curveStrength;
+                    }
+                }
+
+                // Check basket
+                if (checkBasketCollision(disc.x, disc.y)) {
+                    disc.active = false;
+                    state = 'holeDone';
+                    scorecard[currentHole] = throws;
+                    const diff = throws - par[currentHole];
+                    if (throws === 1) {
+                        showMessage('ACE!! HOLE IN ONE!', 2500);
+                    } else {
+                        showMessage(getScoreName(diff) + '!', 2000);
+                    }
+                    setTimeout(() => {
+                        if (currentHole < 8) {
+                            currentHole++;
+                            loadHole(currentHole);
+                        } else {
+                            state = 'gameOver';
+                        }
+                    }, 2200);
+                    return;
+                }
+
+                // Check obstacles
+                let hitWater = false;
+                let hitSand = false;
+                for (const obs of obstacles) {
+                    let result = null;
+                    if (obs.type === 'tree') result = checkTreeCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'rock') result = checkRockCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'water') result = checkWaterCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'sand') result = checkSandCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'windmill') result = checkWindmillCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'bush') result = checkBushCollision(disc.x, disc.y, obs);
+                    else if (obs.type === 'cactus') result = checkCactusCollision(disc.x, disc.y, obs);
+
+                    if (result === 'bounce') {
+                        // Reflect off obstacle
+                        const dx = disc.x - obs.x;
+                        const dy = disc.y - (obs.y || obs.y);
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const dot = disc.vx * nx + disc.vy * ny;
+                        disc.vx = (disc.vx - 2 * dot * nx) * 0.6;
+                        disc.vy = (disc.vy - 2 * dot * ny) * 0.6;
+                        disc.x += nx * 5;
+                        disc.y += ny * 5;
+                        break;
+                    } else if (result === 'windmill') {
+                        // Windmill flings the disc in a random direction
+                        const flingAngle = Math.random() * Math.PI * 2;
+                        const flingSpeed = Math.sqrt(disc.vx ** 2 + disc.vy ** 2) * 1.2;
+                        disc.vx = Math.cos(flingAngle) * flingSpeed;
+                        disc.vy = Math.sin(flingAngle) * flingSpeed;
+                        disc.x += disc.vx * 2;
+                        disc.y += disc.vy * 2;
+                        showMessage('Windmill!', 800);
+                        break;
+                    } else if (result === 'cactus') {
+                        // Cactus bounces hard and slows
+                        const dx = disc.x - obs.x;
+                        const dy = disc.y - obs.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        disc.vx = (dx / dist) * 4;
+                        disc.vy = (dy / dist) * 4;
+                        disc.x += disc.vx;
+                        disc.y += disc.vy;
+                        showMessage('Ouch! Cactus!', 800);
+                        break;
+                    } else if (result === 'water') {
+                        hitWater = true;
+                        break;
+                    } else if (result === 'sand') {
+                        hitSand = true;
+                    }
+                }
+
+                // Sand slows the disc down a lot
+                if (hitSand) {
+                    disc.vx *= 0.94;
+                    disc.vy *= 0.94;
+                }
+
+                if (hitWater) {
+                    showMessage('Splash! +1 Penalty', 1200);
+                    throws++;
+                    totalThrows++;
+                    disc.active = false;
+                    state = 'aiming';
+                    power = 0;
+                    disc.trail = [];
+                    return;
+                }
+
+                // Boundary bounce
+                if (disc.x < 8 || disc.x > canvas.width - 8) {
+                    disc.vx *= -0.6;
+                    disc.x = Math.max(8, Math.min(canvas.width - 8, disc.x));
+                }
+                if (disc.y < 8 || disc.y > canvas.height - 8) {
+                    disc.vy *= -0.6;
+                    disc.y = Math.max(8, Math.min(canvas.height - 8, disc.y));
+                }
+
+                // Disc stopped
+                const speed = Math.sqrt(disc.vx ** 2 + disc.vy ** 2);
+                if (speed < 0.3) {
+                    disc.active = false;
+                    turtle.x = disc.x;
+                    turtle.y = disc.y;
+                    state = 'aiming';
+                    power = 0;
+                    disc.trail = [];
+                    // Aim towards basket by default
+                    aimAngle = Math.atan2(basket.y - turtle.y, basket.x - turtle.x);
+                }
+            }
+        }
+
+        function draw() {
+            // Background - grass
+            const bgGrad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 50, canvas.width / 2, canvas.height / 2, 500);
+            bgGrad.addColorStop(0, '#2a6b2a');
+            bgGrad.addColorStop(1, '#1a4a1a');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawGrass();
+            drawObstacles();
+            drawBasket(basket.x, basket.y);
+
+            // Draw turtle
+            drawTurtle(turtle.x, turtle.y, turtle.angle || aimAngle);
+
+            // Draw disc if flying
+            if (disc.active) {
+                drawDisc(disc.x, disc.y);
+            }
+
+            drawAimArrow();
+            drawPowerBar();
+            drawHUD();
+
+            if (state === 'gameOver') {
+                drawScorecard();
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resetGame() {
+            currentHole = 0;
+            totalThrows = 0;
+            scorecard = [];
+            loadHole(0);
+            state = 'aiming';
+        }
+
+        // Start
+        loadHole(0);
+        aimAngle = Math.atan2(basket.y - turtle.y, basket.x - turtle.x);
+        gameLoop();
+    </script>
+</body>
+</html>
