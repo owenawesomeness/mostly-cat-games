@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mostly Cat Games</title>
+<style>
+  :root {
+    --bg: #fef6e4;
+    --card: #fff;
+    --ink: #001858;
+    --accent: #f582ae;
+    --accent2: #8bd3dd;
+    --shadow: rgba(0, 24, 88, 0.15);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .tagline {
+    color: #5d6680;
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  a.card {
+    display: block;
+    background: var(--card);
+    color: var(--ink);
+    text-decoration: none;
+    padding: 1.25rem 1.25rem 1.1rem;
+    border-radius: 14px;
+    box-shadow: 0 4px 0 var(--shadow);
+    border: 2px solid var(--ink);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  a.card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 0 8px 0 var(--shadow);
+    background: var(--accent2);
+  }
+  a.card:active {
+    transform: translate(0, 0);
+    box-shadow: 0 2px 0 var(--shadow);
+  }
+  .emoji {
+    font-size: 1.8rem;
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .name {
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    color: #5d6680;
+    font-size: 0.9rem;
+  }
+  footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Mostly Cat Games</h1>
+    <p class="tagline">A small pile of browser games. Click one to play.</p>
+  </header>
+
+  <main>
+    <div class="grid">
+      <a class="card" href="bagel_cat_adventure.html"><span class="emoji">🥯</span><span class="name">Bagel Cat Adventure</span></a>
+      <a class="card" href="cat_knockoff.html"><span class="emoji">💥</span><span class="name">Cat Knockoff</span></a>
+      <a class="card" href="cat_pong.html"><span class="emoji">🏓</span><span class="name">Cat Pong</span></a>
+      <a class="card" href="peak_climb.html"><span class="emoji">⛰️</span><span class="name">Peak Climb</span></a>
+      <a class="card" href="ping_pong.html"><span class="emoji">🏓</span><span class="name">Ping Pong</span></a>
+      <a class="card" href="sushi_cat.html"><span class="emoji">🍣</span><span class="name">Sushi Cat</span></a>
+      <a class="card" href="turtle_disc_golf.html"><span class="emoji">🐢</span><span class="name">Turtle Disc Golf</span></a>
+    </div>
+  </main>
+
+  <footer>
+    <p>Source on <a href="https://github.com/owenawesomeness/mostly-cat-games">GitHub</a></p>
+  </footer>
+</body>
+</html>
