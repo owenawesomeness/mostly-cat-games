@@ -1,7 +1,7 @@
 // Shared 2026 World Cup tournament core: official draw data, FIFA Annex C
 // third-place allocation, bracket resolution, WC26~ share-code codec, and the
 // ESPN live-results engine. Loaded via <script src> by both
-// 2026_world_cup_bracket.html and 2026_world_cup_leader_board.html.
+// bracket.html and leader_board.html.
 
   // ===== Data: 12 groups × 4 teams (official FIFA final draw, 5 Dec 2025) =====
   const GROUPS = {
