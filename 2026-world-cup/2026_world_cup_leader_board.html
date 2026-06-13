@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 World Cup Leaderboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    background:
+      radial-gradient(1100px 600px at 15% -10%, rgba(94, 224, 138, 0.18), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(247, 208, 70, 0.12), transparent 55%),
+      linear-gradient(180deg, #0a5f38 0%, #064024 55%, #04301b 100%);
+    background-attachment: fixed;
+    color: #fff;
+    min-height: 100vh;
+    padding: 1.5rem 1rem 3rem;
+  }
+  header { text-align: center; margin-bottom: 1.5rem; }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 5.5vw, 2.7rem);
+    letter-spacing: 0.04em; text-transform: uppercase; font-weight: 900;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+  }
+  h1 .title-text {
+    background: linear-gradient(180deg, #fff 0%, #ffe9a8 60%, #f7d046 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header .sub { opacity: 0.85; font-size: 0.92rem; margin-top: 0.4rem; }
+  header .sub a { color: #f7d046; }
+
+  main { max-width: 1100px; margin: 0 auto; }
+  section.stage {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+    border-radius: 18px;
+    padding: 1.4rem 1.25rem;
+    margin-bottom: 1.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  section.stage h2 {
+    margin: 0 0 1rem; font-size: 1.15rem;
+    letter-spacing: 0.05em; text-transform: uppercase; color: #f7d046;
+  }
+
+  button {
+    background: linear-gradient(180deg, #ffe066 0%, #f7d046 100%);
+    color: #0a3d20; border: none;
+    padding: 0.55rem 1rem; border-radius: 10px;
+    font-weight: 700; cursor: pointer; font-size: 0.86rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: transform 0.12s ease, filter 0.2s ease;
+  }
+  button:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  button.secondary {
+    background: rgba(255, 255, 255, 0.12); color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  button.secondary:hover { background: rgba(255, 255, 255, 0.22); }
+
+  .controls { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.4rem; }
+  .status { font-size: 0.8rem; opacity: 0.85; min-height: 1.2em; flex: 1 1 240px; }
+  .status.err { color: #ffb4b4; opacity: 1; }
+
+  .load-area textarea {
+    width: 100%; resize: vertical; margin: 0.6rem 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #fff; border-radius: 6px;
+    padding: 0.45rem 0.6rem; font-size: 0.8rem;
+    font-family: monospace; word-break: break-all;
+  }
+
+  .board-wrap { overflow-x: auto; }
+  table.board { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.88rem; }
+  .board th, .board td { padding: 0.55rem 0.6rem; text-align: center; }
+  .board th {
+    font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #f7d046; border-bottom: 2px solid rgba(247, 208, 70, 0.4);
+    white-space: nowrap;
+  }
+  .board tbody tr { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .board tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+  .board td.rank { font-weight: 800; font-size: 1rem; white-space: nowrap; }
+  .board td.name { text-align: left; font-weight: 700; white-space: nowrap; }
+  .board td.champ-pick { white-space: nowrap; }
+  .board td.champ-pick.out { text-decoration: line-through; opacity: 0.55; }
+  .board td.champ-pick.won { color: #5ee08a; font-weight: 800; }
+  .board td.pts { font-variant-numeric: tabular-nums; }
+  .board td.total { font-weight: 800; font-size: 1.02rem; color: #f7d046; font-variant-numeric: tabular-nums; }
+  .board tr.podium-1 td { background: rgba(247, 208, 70, 0.13); }
+  .board tr.podium-2 td { background: rgba(192, 192, 192, 0.1); }
+  .board tr.podium-3 td { background: rgba(205, 127, 50, 0.1); }
+  .empty-note { opacity: 0.7; font-style: italic; text-align: center; padding: 1.2rem; }
+  .foot-note { font-size: 0.78rem; opacity: 0.7; margin-top: 0.8rem; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🏆 <span class="title-text">2026 World Cup Leaderboard</span> 🏆</h1>
+    <div class="sub">Standings for everyone's bracket — fill yours out on the <a href="2026_world_cup_bracket.html">bracket page</a>.</div>
+  </header>
+
+  <main>
+    <section class="stage" id="boardSection">
+      <h2>Standings</h2>
+      <div class="controls">
+        <button id="refreshResults" class="secondary">🔄 Update Results</button>
+        <span class="status" id="resultsStatus" aria-live="polite"></span>
+      </div>
+      <div class="board-wrap" id="boardWrap"></div>
+      <div class="foot-note">
+        Scoring: 1 pt per correct group qualifier and 3rd-place pick, then 2 / 4 / 8 / 16 / 32 pts per team
+        correctly advanced from the Round of 32 / 16 / Quarters / Semis / Final (192 max). Knockout credit is
+        path-independent. A struck-through champion pick has been eliminated. Results from ESPN's public scoreboard.
+      </div>
+    </section>
+
+    <section class="stage" id="loadSection">
+      <h2>Brackets</h2>
+      <div class="controls">
+        <button id="loadDirBtn" class="secondary">📂 Load results Folder</button>
+        <button id="loadFileBtn" class="secondary">📄 Load File(s)</button>
+        <button id="pasteToggle" class="secondary">📋 Paste Codes</button>
+        <input id="dirInput" type="file" webkitdirectory hidden>
+        <input id="fileInput" type="file" accept=".txt,.json,text/plain,application/json" multiple hidden>
+        <span class="status" id="loadStatus" aria-live="polite"></span>
+      </div>
+      <div class="load-area" id="pasteArea" hidden>
+        <textarea id="pasteCodes" rows="4" placeholder="One bracket code per line (each starts with WC26~) …"></textarea>
+        <button id="loadPasted">Load Pasted Codes</button>
+      </div>
+    </section>
+  </main>
+
+<script src="2026_world_cup_core.js"></script>
+<script>
+  const ENTRIES_KEY = "wc2026-leaderboard-entries-v2";
+  const RESULTS_DIR = "results";
+  const RESULTS_FILE = "2026_world_cup_results.txt";
+
+  let entries = [];   // { name, state }
+  let resultsData = null;
+
+  function setStatus(id, text, err = false) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.classList.toggle("err", err);
+  }
+
+  // ===== Bracket codes =====
+  function parseCodeLines(text) {
+    const out = [];
+    (text || "").split(/\r?\n/).forEach(line => {
+      line = line.trim();
+      if (!line || !line.includes(SHARE_PREFIX)) return;
+      const st = parseImport(line);
+      if (st) out.push({ name: st.name || "Unnamed", state: st });
+    });
+    return out;
+  }
+
+  // Duplicate names mean the same person submitted twice; keep the later one
+  // (JSON files are processed after txt codes, so a full file wins over a code).
+  function dedupeByName(list) {
+    const byName = new Map();
+    list.forEach(en => byName.set(en.name.trim().toLowerCase(), en));
+    return [...byName.values()];
+  }
+
+  function adoptEntries(parsed, sourceLabel, skipped = []) {
+    const deduped = dedupeByName(parsed);
+    if (!deduped.length) {
+      setStatus("loadStatus", "No valid brackets found in " + sourceLabel + ".", true);
+      return false;
+    }
+    entries = deduped;
+    try {
+      localStorage.setItem(ENTRIES_KEY, JSON.stringify({ savedAt: Date.now(), entries }));
+    } catch (e) {}
+    let msg = `${deduped.length} bracket${deduped.length === 1 ? "" : "s"} loaded from ${sourceLabel}.`;
+    if (skipped.length) msg += ` Skipped (unreadable): ${skipped.join(", ")}.`;
+    setStatus("loadStatus", msg, skipped.length > 0);
+    renderBoard();
+    return true;
+  }
+
+  function adoptCodes(text, sourceLabel) {
+    return adoptEntries(parseCodeLines(text), sourceLabel);
+  }
+
+  async function adoptFiles(fileList, sourceLabel) {
+    const files = [...fileList].filter(f => /\.(txt|json)$/i.test(f.name) && !f.name.startsWith("."));
+    // txt first so a JSON file for the same name overrides its code line
+    files.sort((a, b) => /\.json$/i.test(a.name) - /\.json$/i.test(b.name));
+    const parsed = [], skipped = [];
+    for (const f of files) {
+      let ok = false;
+      try {
+        const text = await f.text();
+        if (/\.json$/i.test(f.name)) {
+          const st = parseImport(text);
+          if (st) { parsed.push({ name: st.name || f.name.replace(/\.json$/i, ""), state: st }); ok = true; }
+        } else {
+          const fromTxt = parseCodeLines(text);
+          if (fromTxt.length) { parsed.push(...fromTxt); ok = true; }
+        }
+      } catch (e) {}
+      if (!ok) skipped.push(f.name);
+    }
+    adoptEntries(parsed, sourceLabel, skipped);
+  }
+
+  function loadCachedEntries() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(ENTRIES_KEY));
+      if (cached && Array.isArray(cached.entries) && cached.entries.length) {
+        entries = cached.entries;
+        const when = new Date(cached.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+        setStatus("loadStatus", `${entries.length} brackets (cached ${when}) — reload the folder if it changed.`);
+      }
+    } catch (e) {}
+  }
+
+  // Works when the folder is served over http; browsers block fetch of local
+  // files from file:// pages, in which case the folder picker is the way in.
+  // Only grabs the txt file — http gives no directory listing for the JSONs —
+  // so it must not clobber a cached folder load that includes JSON brackets.
+  async function tryFetchResultsFile() {
+    if (entries.length) return;
+    try {
+      const res = await fetch(RESULTS_DIR + "/" + RESULTS_FILE, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      adoptCodes(await res.text(), RESULTS_FILE);
+    } catch (e) {
+      if (!entries.length) {
+        setStatus("loadStatus",
+          "Couldn't auto-read the results file (normal when opened from file://) — use the button to pick the “" + RESULTS_DIR + "” folder.", true);
+      }
+    }
+  }
+
+  // ===== Live results (same cache the bracket page uses) =====
+  function loadResultsCache() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RESULTS_KEY));
+      if (parsed && Array.isArray(parsed.matches)) resultsData = parsed;
+    } catch (e) {}
+  }
+
+  function describeResults(R) {
+    const when = new Date(resultsData.fetchedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    return `Results updated ${when} — ${R.groupDone} of 72 group games and ${R.koDone} of 32 knockout games final.`;
+  }
+
+  async function refreshResults() {
+    setStatus("resultsStatus", "Fetching results from ESPN…");
+    try {
+      const res = await fetch(ESPN_SCOREBOARD);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const matches = parseEvents(await res.json());
+      resultsData = { fetchedAt: Date.now(), matches };
+      try { localStorage.setItem(RESULTS_KEY, JSON.stringify(resultsData)); } catch (e) {}
+      renderBoard();
+    } catch (e) {
+      setStatus("resultsStatus", "Couldn't fetch live results (" + e.message + ")." +
+        (resultsData ? " Standings use cached data." : " No results yet — standings show zeros."), true);
+      renderBoard();
+    }
+  }
+
+  // ===== Standings =====
+  function championStatus(champ, R) {
+    if (!champ) return "none";
+    if (R.actual.knockout[FINAL.num] === champ) return "won";
+    const g = GROUP_OF[champ];
+    const ag = R.actualGroups[g];
+    if (ag && ag.complete) {
+      const pos = ag.order.indexOf(champ);
+      if (pos > 2) return "out";
+      if (pos === 2 && R.allGroupsDone && R.actual.wildcards[g] !== champ) return "out";
+    }
+    for (const m of Object.values(R.actualMatches)) {
+      if ((m.a === champ || m.b === champ) && m.winner !== champ) return "out";
+    }
+    return "alive";
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function renderBoard() {
+    const wrap = document.getElementById("boardWrap");
+    wrap.innerHTML = "";
+    if (!entries.length) {
+      wrap.innerHTML = `<div class="empty-note">No brackets loaded yet — load the “${RESULTS_DIR}” folder below.</div>`;
+      return;
+    }
+    const R = buildActual(resultsData ? resultsData.matches : []);
+    if (resultsData) setStatus("resultsStatus", describeResults(R));
+
+    const scored = entries.map(en => {
+      const rounds = scoreBracket(en.state, R);
+      return { ...en, rounds, total: rounds.reduce((s, r) => s + r.pts, 0) };
+    }).sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
+
+    const labels = scored[0].rounds.map(r => r.label);
+    const table = document.createElement("table");
+    table.className = "board";
+    table.innerHTML = `<thead><tr>
+      <th>Rank</th><th style="text-align:left">Name</th><th>Champion Pick</th>
+      ${labels.map(l => `<th>${l}</th>`).join("")}<th>Total</th>
+    </tr></thead>`;
+    const tbody = document.createElement("tbody");
+
+    const medals = ["🥇", "🥈", "🥉"];
+    let rank = 0, prevTotal = null;
+    scored.forEach((en, i) => {
+      if (en.total !== prevTotal) { rank = i + 1; prevTotal = en.total; }
+      const tr = document.createElement("tr");
+      if (rank <= 3) tr.className = "podium-" + rank;
+
+      const champName = en.state.knockout[FINAL.num];
+      const champ = findTeamByName(champName);
+      const cStatus = championStatus(champName, R);
+      const tie = i > 0 && en.total === scored[i - 1].total;
+
+      tr.innerHTML = `
+        <td class="rank">${medals[rank - 1] || ""} ${tie ? "T-" : ""}${rank}</td>
+        <td class="name">${escapeHtml(en.name)}</td>
+        <td class="champ-pick ${cStatus}">${champ ? champ.flag + " " + champ.name : "—"}${cStatus === "won" ? " 🏆" : ""}</td>
+        ${en.rounds.map(r => `<td class="pts" title="${r.label}: ${r.pts} of ${r.max}">${r.pts}</td>`).join("")}
+        <td class="total">${en.total}</td>`;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+  }
+
+  // ===== Wiring =====
+  document.getElementById("refreshResults").addEventListener("click", refreshResults);
+  document.getElementById("loadDirBtn").addEventListener("click", () => document.getElementById("dirInput").click());
+  document.getElementById("loadFileBtn").addEventListener("click", () => document.getElementById("fileInput").click());
+  document.getElementById("dirInput").addEventListener("change", (e) => {
+    if (e.target.files.length) adoptFiles(e.target.files, "the “" + RESULTS_DIR + "” folder");
+    e.target.value = "";
+  });
+  document.getElementById("fileInput").addEventListener("change", (e) => {
+    const files = e.target.files;
+    if (files.length) adoptFiles(files, files.length === 1 ? files[0].name : files.length + " files");
+    e.target.value = "";
+  });
+  document.getElementById("pasteToggle").addEventListener("click", () => {
+    const area = document.getElementById("pasteArea");
+    area.hidden = !area.hidden;
+  });
+  document.getElementById("loadPasted").addEventListener("click", () => {
+    adoptCodes(document.getElementById("pasteCodes").value, "pasted text");
+  });
+
+  loadCachedEntries();
+  loadResultsCache();
+  renderBoard();
+  tryFetchResultsFile();
+  if (!resultsData || Date.now() - resultsData.fetchedAt > 30 * 60 * 1000) refreshResults();
+</script>
+</body>
+</html>
