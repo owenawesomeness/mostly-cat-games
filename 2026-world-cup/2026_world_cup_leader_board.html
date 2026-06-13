@@ -124,7 +124,7 @@
     <section class="stage" id="loadSection">
       <h2>Brackets</h2>
       <div class="controls">
-        <button id="loadDirBtn" class="secondary">📂 Load results Folder</button>
+        <button id="loadDirBtn" class="secondary">📂 Load Brackets Folder</button>
         <button id="loadFileBtn" class="secondary">📄 Load File(s)</button>
         <button id="pasteToggle" class="secondary">📋 Paste Codes</button>
         <input id="dirInput" type="file" webkitdirectory hidden>
@@ -141,7 +141,6 @@
 <script src="2026_world_cup_core.js"></script>
 <script>
   const ENTRIES_KEY = "wc2026-leaderboard-entries-v2";
-  const RESULTS_DIR = "results";
   const RESULTS_FILE = "2026_world_cup_results.txt";
 
   let entries = [];   // { name, state }
@@ -234,13 +233,13 @@
   async function tryFetchResultsFile() {
     if (entries.length) return;
     try {
-      const res = await fetch(RESULTS_DIR + "/" + RESULTS_FILE, { cache: "no-store" });
+      const res = await fetch(RESULTS_FILE, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       adoptCodes(await res.text(), RESULTS_FILE);
     } catch (e) {
       if (!entries.length) {
         setStatus("loadStatus",
-          "Couldn't auto-read the results file (normal when opened from file://) — use the button to pick the “" + RESULTS_DIR + "” folder.", true);
+          "Couldn't auto-read “" + RESULTS_FILE + "” (normal when opened from file://) — use the buttons below to load brackets.", true);
       }
     }
   }
@@ -299,7 +298,7 @@
     const wrap = document.getElementById("boardWrap");
     wrap.innerHTML = "";
     if (!entries.length) {
-      wrap.innerHTML = `<div class="empty-note">No brackets loaded yet — load the “${RESULTS_DIR}” folder below.</div>`;
+      wrap.innerHTML = `<div class="empty-note">No brackets loaded yet — use the buttons below to load some.</div>`;
       return;
     }
     const R = buildActual(resultsData ? resultsData.matches : []);
