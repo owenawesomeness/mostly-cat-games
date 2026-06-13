@@ -140,7 +140,6 @@
 
 <script src="core.js"></script>
 <script>
-  const ENTRIES_KEY = "wc2026-leaderboard-entries-v2";
   const RESULTS_FILE = "results.txt";
 
   let entries = [];   // { name, state }
@@ -179,9 +178,6 @@
       return false;
     }
     entries = deduped;
-    try {
-      localStorage.setItem(ENTRIES_KEY, JSON.stringify({ savedAt: Date.now(), entries }));
-    } catch (e) {}
     let msg = `${deduped.length} bracket${deduped.length === 1 ? "" : "s"} loaded from ${sourceLabel}.`;
     if (skipped.length) msg += ` Skipped (unreadable): ${skipped.join(", ")}.`;
     setStatus("loadStatus", msg, skipped.length > 0);
@@ -215,32 +211,17 @@
     adoptEntries(parsed, sourceLabel, skipped);
   }
 
-  function loadCachedEntries() {
-    try {
-      const cached = JSON.parse(localStorage.getItem(ENTRIES_KEY));
-      if (cached && Array.isArray(cached.entries) && cached.entries.length) {
-        entries = cached.entries;
-        const when = new Date(cached.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-        setStatus("loadStatus", `${entries.length} brackets (cached ${when}) — reload the folder if it changed.`);
-      }
-    } catch (e) {}
-  }
-
-  // Works when the folder is served over http; browsers block fetch of local
-  // files from file:// pages, in which case the folder picker is the way in.
-  // Only grabs the txt file — http gives no directory listing for the JSONs —
-  // so it must not clobber a cached folder load that includes JSON brackets.
+  // Always re-fetch on load so the leaderboard reflects the latest pushed
+  // results.txt. Browsers block fetch of local files from file:// pages,
+  // in which case the file/folder pickers are the way in.
   async function tryFetchResultsFile() {
-    if (entries.length) return;
     try {
       const res = await fetch(RESULTS_FILE, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       adoptCodes(await res.text(), RESULTS_FILE);
     } catch (e) {
-      if (!entries.length) {
-        setStatus("loadStatus",
-          "Couldn't auto-read “" + RESULTS_FILE + "” (normal when opened from file://) — use the buttons below to load brackets.", true);
-      }
+      setStatus("loadStatus",
+        "Couldn't auto-read “" + RESULTS_FILE + "” (normal when opened from file://) — use the buttons below to load brackets.", true);
     }
   }
 
@@ -363,7 +344,6 @@
     adoptCodes(document.getElementById("pasteCodes").value, "pasted text");
   });
 
-  loadCachedEntries();
   loadResultsCache();
   renderBoard();
   tryFetchResultsFile();
